@@ -46,6 +46,7 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         area=post.area,
         price=post.price,
         bedrooms=post.bedrooms,
+        building_year=post.building_year,
         raw_description=post.description,
         structured_text=structured,
         unique_code=code,
@@ -65,9 +66,14 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
     db.refresh(listing)
 
     warnings: list[str] = []
-    if listing.area is None or listing.price is None or listing.bedrooms is None:
+    if (
+        listing.area is None
+        or listing.price is None
+        or listing.bedrooms is None
+        or listing.building_year is None
+    ):
         warnings.append(
-            "برخی فیلدهای عددی از دیوار خوانده نشد. تا وقتی متراژ، قیمت و خواب کامل نباشد، ربات این آگهی را پیشنهاد نمی‌دهد."
+            "بعضی از مشخصات از دیوار خوانده نشد. اگر خریدار همان مورد را انتخاب کند، این آگهی در نتایج نمی‌آید."
         )
     if post.description and not listing.llm_used:
         warnings.append("متن توضیحات بدون بازنویسی مدل زبانی ذخیره شد.")

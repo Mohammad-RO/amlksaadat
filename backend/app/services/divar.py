@@ -6,7 +6,7 @@ import httpx
 
 from app.config import settings
 from app.errors import AppError
-from app.utils import parse_number
+from app.utils import parse_build_year, parse_number
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class DivarPost:
     area: float | None
     price: int | None
     bedrooms: int | None
+    building_year: int | None
     image_urls: list[str]
     specs: list[tuple[str, str]]
 
@@ -40,6 +41,16 @@ def _score_bedrooms(title: str) -> int:
     if "خواب" in title:
         return 3
     if title in {"اتاق", "تعداد اتاق"}:
+        return 2
+    return 0
+
+
+def _score_year(title: str) -> int:
+    if "سال ساخت" in title:
+        return 4
+    if title in {"سن بنا", "سن ساختمان"}:
+        return 3
+    if "ساخت" in title:
         return 2
     return 0
 
@@ -156,6 +167,7 @@ def parse_divar_post(payload: dict) -> DivarPost:
     area_raw = _best_value(pairs, _score_area)
     price_raw = _best_value(pairs, _score_price)
     bedrooms_raw = _best_value(pairs, _score_bedrooms)
+    year_raw = _best_value(pairs, _score_year)
 
     area = parse_number(area_raw) if area_raw else None
     price_number = parse_number(price_raw) if price_raw else None
@@ -185,6 +197,7 @@ def parse_divar_post(payload: dict) -> DivarPost:
         area=area,
         price=int(price_number) if price_number is not None else None,
         bedrooms=int(bedrooms_number) if bedrooms_number is not None else None,
+        building_year=parse_build_year(year_raw),
         image_urls=unique_images[:10],
         specs=specs,
     )

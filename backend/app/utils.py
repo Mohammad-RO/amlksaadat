@@ -53,6 +53,40 @@ def extract_divar_token(url: str) -> str | None:
     return None
 
 
+def current_jalali_year() -> int:
+    local = datetime.now(TEHRAN).replace(tzinfo=None)
+    return jdatetime.datetime.fromgregorian(datetime=local).year
+
+
+def parse_build_year(raw: str | None, now_year: int | None = None) -> int | None:
+    if not raw or not raw.strip():
+        return None
+    year = current_jalali_year() if now_year is None else now_year
+    text = to_english_digits(raw)
+    if "نوساز" in raw or "نوساز" in text:
+        return year
+    match = re.search(r"(?:13|14)\d{2}", text)
+    if match:
+        return int(match.group(0))
+    if "سال" in raw:
+        age = parse_number(text)
+        if age is not None and 0 <= age < 80:
+            return year - int(age)
+    return None
+
+
+def build_year_from_text(text: str, now_year: int | None = None) -> int | None:
+    for line in (text or "").splitlines():
+        if not any(key in line for key in ("سال ساخت", "سن بنا", "سن ساختمان")):
+            continue
+        value = line.split(":", 1)[-1] if ":" in line or "：" in line else line
+        value = value.split("：", 1)[-1]
+        year = parse_build_year(value, now_year)
+        if year is not None:
+            return year
+    return None
+
+
 def parse_number(raw: str) -> float | None:
     text = to_english_digits(raw or "")
     text = text.replace(",", "").replace("٬", "").replace("،", "").replace(" ", "")

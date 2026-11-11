@@ -7,36 +7,97 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from app.database import SessionLocal
 from app.models import BuyerSession, Listing
 from app.services.matching import match_listings
-from app.utils import parse_number, to_english_digits
+from app.utils import to_english_digits
 
 logger = logging.getLogger(__name__)
 
 BUY = "خرید خانه"
 RESTART = "شروع دوباره"
 CONTINUE = "ادامه"
+ANY = "مهم نیست"
+BILLION = 1_000_000_000
+AREA_CHOICES: dict[str, tuple[float, float | None] | None] = {
+    "70 تا 90 متر": (70, 90),
+    "90 تا 110 متر": (90, 110),
+    "110 تا 130 متر": (110, 130),
+    "130 تا 160 متر": (130, 160),
+    "160 تا 190 متر": (160, 190),
+    "190 تا 230 متر": (190, 230),
+    "230 تا 270 متر": (230, 270),
+    "270 متر به بالا": (270, None),
+    ANY: None,
+}
+PRICE_CHOICES: dict[str, tuple[int, int | None] | None] = {
+    "30 تا 50 میلیارد": (30 * BILLION, 50 * BILLION),
+    "50 تا 70 میلیارد": (50 * BILLION, 70 * BILLION),
+    "70 تا 90 میلیارد": (70 * BILLION, 90 * BILLION),
+    "90 تا 110 میلیارد": (90 * BILLION, 110 * BILLION),
+    "110 تا 140 میلیارد": (110 * BILLION, 140 * BILLION),
+    "140 تا 170 میلیارد": (140 * BILLION, 170 * BILLION),
+    "170 تا 200 میلیارد": (170 * BILLION, 200 * BILLION),
+    "200 تا 250 میلیارد": (200 * BILLION, 250 * BILLION),
+    "250 تا 300 میلیارد": (250 * BILLION, 300 * BILLION),
+    "300 میلیارد به بالا": (300 * BILLION, None),
+    ANY: None,
+}
+AGE_CHOICES: dict[str, tuple[int, int | None] | None] = {
+    "نوساز": (0, 1),
+    "کمتر از 5 سال": (0, 4),
+    "5 تا 10 سال": (5, 10),
+    "10 تا 15 سال": (10, 15),
+    "15 تا 20 سال": (15, 20),
+    "20 تا 30 سال": (20, 30),
+    "30 سال به بالا": (30, None),
+    ANY: None,
+}
 BEDROOM_CHOICES = {
     "تک خواب": (1, False),
     "دو خواب": (2, False),
     "سه خواب": (3, False),
     "چهار خواب و بیشتر": (4, True),
+    ANY: None,
 }
+AREA_PROMPT = "بازه متراژ را انتخاب کنید."
+PRICE_PROMPT = "بازه قیمت را انتخاب کنید."
+AGE_PROMPT = "سن بنا را انتخاب کنید."
+BEDROOM_PROMPT = "تعداد خواب را انتخاب کنید."
+
+
+def _rtl_row(labels: list[str]) -> list[KeyboardButton]:
+    return [KeyboardButton(label) for label in reversed(labels)]
+
+
+def _choice_keyboard(labels: list[str], columns: int) -> ReplyKeyboardMarkup:
+    rows: list[list[KeyboardButton]] = []
+    row: list[str] = []
+    for label in labels:
+        if label == ANY:
+            if row:
+                rows.append(_rtl_row(row))
+                row = []
+            rows.append([KeyboardButton(ANY)])
+            continue
+        row.append(label)
+        if len(row) == columns:
+            rows.append(_rtl_row(row))
+            row = []
+    if row:
+        rows.append(_rtl_row(row))
+    rows.append(_rtl_row([RESTART, CONTINUE]))
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+
+
 MENU = ReplyKeyboardMarkup(
     [
         [KeyboardButton(BUY)],
-        [KeyboardButton(RESTART), KeyboardButton(CONTINUE)],
+        _rtl_row([RESTART, CONTINUE]),
     ],
     resize_keyboard=True,
 )
-BEDROOM_KEYBOARD = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton("تک خواب"), KeyboardButton("دو خواب")],
-        [KeyboardButton("سه خواب"), KeyboardButton("چهار خواب و بیشتر")],
-        [KeyboardButton(RESTART), KeyboardButton(CONTINUE)],
-    ],
-    resize_keyboard=True,
-)
-AREA_PROMPT = "متراژ خانه را به متر وارد کنید.\nمثال: 90"
-PRICE_PROMPT = "قیمت را فقط با یک عدد وارد کنید.\nمثال: 65، یعنی 65 میلیارد تومان."
+AREA_KEYBOARD = _choice_keyboard(list(AREA_CHOICES), 2)
+PRICE_KEYBOARD = _choice_keyboard(list(PRICE_CHOICES), 1)
+AGE_KEYBOARD = _choice_keyboard(list(AGE_CHOICES), 2)
+BEDROOM_KEYBOARD = _choice_keyboard(list(BEDROOM_CHOICES), 2)
 
 
 def _session(user_id: int, chat_id: int) -> BuyerSession:
@@ -64,17 +125,26 @@ def _save(row: BuyerSession) -> None:
         current.price = row.price
         current.bedrooms = row.bedrooms
         current.bedrooms_or_more = row.bedrooms_or_more
+        current.bedrooms_skipped = row.bedrooms_skipped
+        current.area_min = row.area_min
+        current.area_max = row.area_max
+        current.area_skipped = row.area_skipped
+        current.price_min = row.price_min
+        current.price_max = row.price_max
+        current.price_skipped = row.price_skipped
+        current.age_min = row.age_min
+        current.age_max = row.age_max
+        current.age_skipped = row.age_skipped
         current.chat_id = row.chat_id
         db.commit()
     finally:
         db.close()
 
 
-def _parse_price(text: str) -> int | None:
-    number = parse_number(text)
-    if number is None or number <= 0:
+def _bounds(skipped: bool, low, high):
+    if skipped or (low is None and high is None):
         return None
-    return int(round(number * 1_000_000_000))
+    return (low, high)
 
 
 def _clip(text: str) -> str:
@@ -133,10 +203,11 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
     try:
         found = match_listings(
             db,
-            row.area,
-            int(row.price),
-            int(row.bedrooms),
+            area=_bounds(row.area_skipped, row.area_min, row.area_max),
+            price=_bounds(row.price_skipped, row.price_min, row.price_max),
+            bedrooms=None if row.bedrooms_skipped else row.bedrooms,
             bedrooms_or_more=bool(row.bedrooms_or_more),
+            age=_bounds(row.age_skipped, row.age_min, row.age_max),
         )
         payload = [(item.unique_code, item.structured_text) for item in found]
     finally:
@@ -145,7 +216,7 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
     if not payload:
         await context.bot.send_message(
             chat_id,
-            "خانه‌ای در بازه ۱۵ درصد متراژ و قیمت، با این تعداد خواب، پیدا نشد.\n"
+            "خانه‌ای در بازه‌های انتخاب‌شده پیدا نشد.\n"
             "می‌توانید دوباره «خرید خانه» را بزنید.",
             reply_markup=MENU,
         )
@@ -171,18 +242,43 @@ def _reset_search(row: BuyerSession) -> None:
     row.price = None
     row.bedrooms = None
     row.bedrooms_or_more = False
+    row.bedrooms_skipped = False
+    row.area_min = None
+    row.area_max = None
+    row.area_skipped = False
+    row.price_min = None
+    row.price_max = None
+    row.price_skipped = False
+    row.age_min = None
+    row.age_max = None
+    row.age_skipped = False
     _save(row)
 
 
-async def _resume(message, row: BuyerSession) -> None:
-    if row.step == "price" and row.area is not None:
-        await message.reply_text(PRICE_PROMPT, reply_markup=MENU)
+def _store_range(row: BuyerSession, prefix: str, value) -> None:
+    if value is None:
+        setattr(row, f"{prefix}_skipped", True)
+        setattr(row, f"{prefix}_min", None)
+        setattr(row, f"{prefix}_max", None)
         return
-    if row.step == "bedrooms" and row.price is not None:
-        await message.reply_text("تعداد خواب را انتخاب کنید.", reply_markup=BEDROOM_KEYBOARD)
+    low, high = value
+    setattr(row, f"{prefix}_skipped", False)
+    setattr(row, f"{prefix}_min", low)
+    setattr(row, f"{prefix}_max", high)
+
+
+async def _resume(message, row: BuyerSession) -> None:
+    if row.step == "price":
+        await message.reply_text(PRICE_PROMPT, reply_markup=PRICE_KEYBOARD)
+        return
+    if row.step == "age":
+        await message.reply_text(AGE_PROMPT, reply_markup=AGE_KEYBOARD)
+        return
+    if row.step == "bedrooms":
+        await message.reply_text(BEDROOM_PROMPT, reply_markup=BEDROOM_KEYBOARD)
         return
     if row.step == "area":
-        await message.reply_text(AREA_PROMPT, reply_markup=MENU)
+        await message.reply_text(AREA_PROMPT, reply_markup=AREA_KEYBOARD)
         return
     await message.reply_text(
         "جستجویی در جریان نیست.\nبرای شروع، «شروع دوباره» یا «خرید خانه» را بزنید.",
@@ -199,10 +295,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _reset_search(row)
     await update.message.reply_text(
         "سلام.\n"
-        "متراژ خانه را به متر وارد کنید.\nمثال: 90\n"
+        "بازه متراژ را انتخاب کنید.\n"
         "هر زمان با «شروع دوباره» از نو شروع کنید، یا با «ادامه» به همان مرحله برگردید.\n"
         "اگر کد ۸ رقمی یک آگهی را دارید، همان را ارسال کنید.",
-        reply_markup=MENU,
+        reply_markup=AREA_KEYBOARD,
     )
 
 
@@ -240,44 +336,59 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     row = _session(update.effective_user.id, update.effective_chat.id)
     if text in {BUY, RESTART}:
         _reset_search(row)
-        await update.message.reply_text(AREA_PROMPT, reply_markup=MENU)
+        await update.message.reply_text(AREA_PROMPT, reply_markup=AREA_KEYBOARD)
         return
     if text == CONTINUE:
         await _resume(update.message, row)
         return
 
     if row.step == "area":
-        area = parse_number(text)
-        if area is None or area < 10 or area > 5000:
-            await update.message.reply_text("یک متراژ معتبر به متر بفرستید. مثال: 90", reply_markup=MENU)
+        if text not in AREA_CHOICES:
+            await update.message.reply_text("یکی از بازه‌های متراژ را انتخاب کنید.", reply_markup=AREA_KEYBOARD)
             return
-        row.area = area
+        _store_range(row, "area", AREA_CHOICES[text])
         row.step = "price"
         _save(row)
-        await update.message.reply_text(PRICE_PROMPT, reply_markup=MENU)
+        await update.message.reply_text(PRICE_PROMPT, reply_markup=PRICE_KEYBOARD)
         return
 
     if row.step == "price":
-        price = _parse_price(text)
-        if price is None:
-            await update.message.reply_text("یک عدد وارد کنید. مثال: 65، یعنی 65 میلیارد تومان.", reply_markup=MENU)
+        if text not in PRICE_CHOICES:
+            await update.message.reply_text("یکی از بازه‌های قیمت را انتخاب کنید.", reply_markup=PRICE_KEYBOARD)
             return
-        row.price = price
+        _store_range(row, "price", PRICE_CHOICES[text])
+        row.step = "age"
+        _save(row)
+        await update.message.reply_text(AGE_PROMPT, reply_markup=AGE_KEYBOARD)
+        return
+
+    if row.step == "age":
+        if text not in AGE_CHOICES:
+            await update.message.reply_text("یکی از گزینه‌های سن بنا را انتخاب کنید.", reply_markup=AGE_KEYBOARD)
+            return
+        _store_range(row, "age", AGE_CHOICES[text])
         row.step = "bedrooms"
         row.bedrooms = None
         row.bedrooms_or_more = False
+        row.bedrooms_skipped = False
         _save(row)
-        await update.message.reply_text("تعداد خواب را انتخاب کنید.", reply_markup=BEDROOM_KEYBOARD)
+        await update.message.reply_text(BEDROOM_PROMPT, reply_markup=BEDROOM_KEYBOARD)
         return
 
     if row.step == "bedrooms":
-        choice = BEDROOM_CHOICES.get(text)
-        if choice is None:
+        if text not in BEDROOM_CHOICES:
             await update.message.reply_text("یکی از دکمه‌های تعداد خواب را بزنید.", reply_markup=BEDROOM_KEYBOARD)
             return
-        bedrooms, or_more = choice
-        row.bedrooms = bedrooms
-        row.bedrooms_or_more = or_more
+        choice = BEDROOM_CHOICES[text]
+        if choice is None:
+            row.bedrooms = None
+            row.bedrooms_or_more = False
+            row.bedrooms_skipped = True
+        else:
+            bedrooms, or_more = choice
+            row.bedrooms = bedrooms
+            row.bedrooms_or_more = or_more
+            row.bedrooms_skipped = False
         row.step = "idle"
         _save(row)
         await _show_matches(update.effective_chat.id, row, context)
