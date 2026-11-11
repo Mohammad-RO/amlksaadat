@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", Tahoma, sans-serif;
+  --color-ink: #1c241f;
+  --color-pine: #1e4a38;
+  --color-pine-dark: #143328;
+  --color-moss: #3f6b52;
+  --color-sand: #f4efe6;
+  --color-paper: #fffdf8;
+  --color-line: #e6dfd2;
+  --color-copper: #9a6236;
+  --color-danger: #8d2f2f;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-sand);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
