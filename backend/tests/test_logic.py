@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Agent, Listing
+from app.bot.handlers import _preview_listing
 from app.services.divar import parse_divar_post
 from app.services.llm import compose_listing_text
 from app.services.matching import match_listings
@@ -110,6 +111,43 @@ class LogicTests(unittest.TestCase):
         self.assertIn("این لینک را قبلاً وارد کرده است. تکراری است.", text)
         self.assertTrue(text.startswith("«"))
         self.assertTrue(text.endswith("»"))
+
+    def test_listing_preview_stops_at_storage(self):
+        full = "\n".join(
+            [
+                "فروش آپارتمان",
+                "",
+                "📐 متراژ: ۱۲۰",
+                "🅿️ پارکینگ: دارد",
+                "📦 انباری: دارد",
+                "📄 سند: تک‌برگ",
+                "",
+                "📝 توضیحات",
+                "متن کامل توضیحات",
+                "",
+                "کد: 12345678",
+            ]
+        )
+        preview = _preview_listing(full)
+        self.assertIn("فروش آپارتمان", preview)
+        self.assertIn("انباری: دارد", preview)
+        self.assertNotIn("سند", preview)
+        self.assertNotIn("توضیحات", preview)
+        self.assertNotIn("12345678", preview)
+        without_storage = "\n".join(
+            [
+                "فروش آپارتمان",
+                "📐 متراژ: ۱۲۰",
+                "",
+                "📝 توضیحات",
+                "متن کامل",
+                "کد: 12345678",
+            ]
+        )
+        short = _preview_listing(without_storage)
+        self.assertIn("متراژ: ۱۲۰", short)
+        self.assertNotIn("متن کامل", short)
+        self.assertNotIn("12345678", short)
 
     def test_build_year_text(self):
         self.assertEqual(parse_build_year("نوساز", now_year=1405), 1405)

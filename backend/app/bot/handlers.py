@@ -147,6 +147,24 @@ def _bounds(skipped: bool, low, high):
     return (low, high)
 
 
+def _is_code_line(line: str) -> bool:
+    compact = line.replace(" ", "")
+    return compact.startswith("کد:") or compact.startswith("کد：")
+
+
+def _preview_listing(text: str) -> str:
+    kept: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("📝") or stripped == "توضیحات" or _is_code_line(stripped):
+            break
+        kept.append(line)
+        if "انبار" in stripped and (":" in stripped or "：" in stripped):
+            break
+    preview = "\n".join(kept).strip()
+    return preview or text.strip()
+
+
 def _clip(text: str) -> str:
     if len(text) <= 3800:
         return text
@@ -225,15 +243,15 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
     await context.bot.send_message(
         chat_id,
         f"{len(payload)} خانه نزدیک به درخواست شما پیدا شد.\n"
-        "در این مرحله عکس و شماره مشاور نمایش داده نمی‌شود.\n"
-        "برای جزئیات، دکمه زیر آگهی را بزنید یا کد ۸ رقمی را بفرستید.",
+        "در این فهرست فقط مشخصات تا انباری نشان داده می‌شود.\n"
+        "برای متن کامل، عکس و شماره مشاور، دکمه زیر آگهی را بزنید.",
         reply_markup=MENU,
     )
     for code, text in payload:
         keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton("اطلاعات بیشتر و تماس", callback_data=f"more:{code}")]]
         )
-        await context.bot.send_message(chat_id, _clip(text), reply_markup=keyboard)
+        await context.bot.send_message(chat_id, _clip(_preview_listing(text)), reply_markup=keyboard)
 
 
 def _reset_search(row: BuyerSession) -> None:
