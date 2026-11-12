@@ -216,6 +216,31 @@ async def _download_images(urls: list[str]) -> list[bytes]:
     return photos
 
 
+def _caption(text: str) -> str:
+    preview = _preview_listing(text)
+    if len(preview) <= 1024:
+        return preview
+    return preview[:1000].rstrip() + "…"
+
+
+async def _send_match(chat_id: int, code: str, text: str, file_id: str, url: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("اطلاعات بیشتر و تماس", callback_data=f"more:{code}")]]
+    )
+    caption = _caption(text)
+    photo: str | bytes | None = file_id or None
+    if photo is None and url:
+        downloaded = await _download_images([url])
+        photo = downloaded[0] if downloaded else None
+    if photo is not None:
+        try:
+            await context.bot.send_photo(chat_id, photo, caption=caption, reply_markup=keyboard)
+            return
+        except Exception:
+            logger.exception("could not send listing preview photo")
+    await context.bot.send_message(chat_id, _clip(caption), reply_markup=keyboard)
+
+
 async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.DEFAULT_TYPE) -> None:
     db = SessionLocal()
     try:
@@ -227,7 +252,18 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
             bedrooms_or_more=bool(row.bedrooms_or_more),
             age=_bounds(row.age_skipped, row.age_min, row.age_max),
         )
-        payload = [(item.unique_code, item.structured_text) for item in found]
+        payload = []
+        for item in found:
+            file_ids = list(item.image_file_ids or [])
+            urls = list(item.image_urls or [])
+            payload.append(
+                (
+                    item.unique_code,
+                    item.structured_text,
+                    file_ids[0] if file_ids else "",
+                    urls[0] if urls else "",
+                )
+            )
     finally:
         db.close()
 
@@ -243,15 +279,12 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
     await context.bot.send_message(
         chat_id,
         f"{len(payload)} خانه نزدیک به درخواست شما پیدا شد.\n"
-        "در این فهرست فقط مشخصات تا انباری نشان داده می‌شود.\n"
-        "برای متن کامل، عکس و شماره مشاور، دکمه زیر آگهی را بزنید.",
+        "برای هر خانه عکس اول و مشخصات تا انباری نشان داده می‌شود.\n"
+        "برای بقیه عکس‌ها، متن کامل و شماره مشاور، دکمه زیر آگهی را بزنید.",
         reply_markup=MENU,
     )
-    for code, text in payload:
-        keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("اطلاعات بیشتر و تماس", callback_data=f"more:{code}")]]
-        )
-        await context.bot.send_message(chat_id, _clip(_preview_listing(text)), reply_markup=keyboard)
+    for code, text, file_id, url in payload:
+        await _send_match(chat_id, code, text, file_id, url, context)
 
 
 def _reset_search(row: BuyerSession) -> None:

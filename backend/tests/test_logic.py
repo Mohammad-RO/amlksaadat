@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Agent, Listing
-from app.bot.handlers import _preview_listing
+from app.bot.handlers import _caption, _preview_listing
 from app.services.divar import parse_divar_post
 from app.services.llm import compose_listing_text
 from app.services.matching import match_listings
@@ -170,6 +170,9 @@ class LogicTests(unittest.TestCase):
         self.assertIn("متراژ: ۱۲۰", short)
         self.assertNotIn("متن کامل", short)
         self.assertNotIn("12345678", short)
+        long_preview = "عنوان\n" + ("متن " * 400)
+        self.assertLessEqual(len(_caption(long_preview)), 1024)
+        self.assertTrue(_caption(long_preview).endswith("…"))
 
     def test_build_year_text(self):
         self.assertEqual(parse_build_year("نوساز", now_year=1405), 1405)
