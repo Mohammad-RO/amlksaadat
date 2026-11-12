@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 BUY = "خرید خانه"
 RESTART = "شروع دوباره"
 CONTINUE = "ادامه"
+BACK = "مرحله قبل"
 ANY = "مهم نیست"
 BILLION = 1_000_000_000
 AREA_CHOICES: dict[str, tuple[float, float | None] | None] = {
@@ -67,7 +68,7 @@ def _rtl_row(labels: list[str]) -> list[KeyboardButton]:
     return [KeyboardButton(label) for label in reversed(labels)]
 
 
-def _choice_keyboard(labels: list[str], columns: int) -> ReplyKeyboardMarkup:
+def _choice_keyboard(labels: list[str], columns: int, with_back: bool) -> ReplyKeyboardMarkup:
     rows: list[list[KeyboardButton]] = []
     row: list[str] = []
     for label in labels:
@@ -83,7 +84,10 @@ def _choice_keyboard(labels: list[str], columns: int) -> ReplyKeyboardMarkup:
             row = []
     if row:
         rows.append(_rtl_row(row))
-    rows.append([KeyboardButton(RESTART)])
+    if with_back:
+        rows.append(_rtl_row([BACK, RESTART]))
+    else:
+        rows.append([KeyboardButton(RESTART)])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -101,10 +105,10 @@ RESULT_MENU = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True,
 )
-AREA_KEYBOARD = _choice_keyboard(list(AREA_CHOICES), 2)
-PRICE_KEYBOARD = _choice_keyboard(list(PRICE_CHOICES), 1)
-AGE_KEYBOARD = _choice_keyboard(list(AGE_CHOICES), 2)
-BEDROOM_KEYBOARD = _choice_keyboard(list(BEDROOM_CHOICES), 2)
+AREA_KEYBOARD = _choice_keyboard(list(AREA_CHOICES), 2, with_back=False)
+PRICE_KEYBOARD = _choice_keyboard(list(PRICE_CHOICES), 1, with_back=True)
+AGE_KEYBOARD = _choice_keyboard(list(AGE_CHOICES), 2, with_back=True)
+BEDROOM_KEYBOARD = _choice_keyboard(list(BEDROOM_CHOICES), 2, with_back=True)
 
 
 def _session(user_id: int, chat_id: int) -> BuyerSession:
@@ -344,6 +348,31 @@ async def _resume(message, row: BuyerSession) -> None:
     )
 
 
+async def _go_back(message, row: BuyerSession) -> None:
+    if row.step == "price":
+        row.step = "area"
+        _save(row)
+        await message.reply_text(AREA_PROMPT, reply_markup=AREA_KEYBOARD)
+        return
+    if row.step == "age":
+        row.step = "price"
+        _save(row)
+        await message.reply_text(PRICE_PROMPT, reply_markup=PRICE_KEYBOARD)
+        return
+    if row.step == "bedrooms":
+        row.step = "age"
+        _save(row)
+        await message.reply_text(AGE_PROMPT, reply_markup=AGE_KEYBOARD)
+        return
+    if row.step == "area":
+        await message.reply_text("متراژ اولین مرحله است.", reply_markup=AREA_KEYBOARD)
+        return
+    await message.reply_text(
+        "جستجویی در جریان نیست.\nبرای شروع، «شروع دوباره» یا «خرید خانه» را بزنید.",
+        reply_markup=MENU,
+    )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat is None or update.effective_user is None or update.message is None:
         return
@@ -398,6 +427,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if text == CONTINUE:
         await _resume(update.message, row)
+        return
+    if text == BACK:
+        await _go_back(update.message, row)
         return
 
     if row.step == "area":
