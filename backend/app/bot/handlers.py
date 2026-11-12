@@ -83,7 +83,7 @@ def _choice_keyboard(labels: list[str], columns: int) -> ReplyKeyboardMarkup:
             row = []
     if row:
         rows.append(_rtl_row(row))
-    rows.append(_rtl_row([RESTART, CONTINUE]))
+    rows.append([KeyboardButton(RESTART)])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -91,6 +91,13 @@ MENU = ReplyKeyboardMarkup(
     [
         [KeyboardButton(BUY)],
         _rtl_row([RESTART, CONTINUE]),
+    ],
+    resize_keyboard=True,
+)
+RESULT_MENU = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton(BUY)],
+        [KeyboardButton(RESTART)],
     ],
     resize_keyboard=True,
 )
@@ -272,7 +279,7 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
             chat_id,
             "خانه‌ای در بازه‌های انتخاب‌شده پیدا نشد.\n"
             "می‌توانید دوباره «خرید خانه» را بزنید.",
-            reply_markup=MENU,
+            reply_markup=RESULT_MENU,
         )
         return
 
@@ -281,7 +288,7 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
         f"{len(payload)} خانه نزدیک به درخواست شما پیدا شد.\n"
         "برای هر خانه عکس اول و مشخصات تا انباری نشان داده می‌شود.\n"
         "برای بقیه عکس‌ها، متن کامل و شماره مشاور، دکمه زیر آگهی را بزنید.",
-        reply_markup=MENU,
+        reply_markup=RESULT_MENU,
     )
     for code, text, file_id, url in payload:
         await _send_match(chat_id, code, text, file_id, url, context)
