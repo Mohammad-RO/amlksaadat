@@ -80,6 +80,28 @@ class LogicTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_phone("12345")
 
+    def test_duplicate_photo_sizes_collapse(self):
+        payload = {
+            "seo": {"title": "خانه"},
+            "gallery": [
+                "https://s100.divarcdn.com/static/photo/neda/webp_post/a/6639fed6-26d5-4d38-b198-83325805a1bc.webp",
+                "https://s100.divarcdn.com/static/photo/neda/webp_thumbnail/b/6639fed6-26d5-4d38-b198-83325805a1bc.webp",
+                "https://s100.divarcdn.com/static/photo/neda/webp_post/c/5e504121-6f1e-43d7-8ef5-0d46b0f635a0.webp",
+                "https://s100.divarcdn.com/static/photo/neda/webp_thumbnail/d/5e504121-6f1e-43d7-8ef5-0d46b0f635a0.webp",
+                "https://s100.divarcdn.com/static/photo/neda/post/e/6639fed6-26d5-4d38-b198-83325805a1bc.jpg",
+                "https://mapimage.divarcdn.com/v8/mapimage?encrypted_data=abc",
+                "https://s100.divarcdn.com/static/imgs/widget-icons/dark/icon_secondary/v1/parking.png",
+            ],
+        }
+        post = parse_divar_post(payload)
+        self.assertEqual(
+            post.image_urls,
+            [
+                "https://s100.divarcdn.com/static/photo/neda/webp_post/a/6639fed6-26d5-4d38-b198-83325805a1bc.webp",
+                "https://s100.divarcdn.com/static/photo/neda/webp_post/c/5e504121-6f1e-43d7-8ef5-0d46b0f635a0.webp",
+            ],
+        )
+
     def test_divar_parser(self):
         post = parse_divar_post(SAMPLE)
         self.assertEqual(post.area, 120)

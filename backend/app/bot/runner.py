@@ -4,6 +4,7 @@ import logging
 from telegram import BotCommand
 from telegram.error import NetworkError, TimedOut
 from telegram.ext import Application
+from telegram.request import HTTPXRequest
 
 from app.bot.handlers import register_handlers
 from app.config import settings
@@ -12,11 +13,26 @@ from app.services.archive import set_bot
 logger = logging.getLogger(__name__)
 
 
+def _telegram_request(read_timeout: float, write_timeout: float, media_write_timeout: float) -> HTTPXRequest:
+    proxy = settings.telegram_proxy.strip() or None
+    return HTTPXRequest(
+        connection_pool_size=8,
+        proxy=proxy,
+        connect_timeout=30,
+        read_timeout=read_timeout,
+        write_timeout=write_timeout,
+        media_write_timeout=media_write_timeout,
+        pool_timeout=10,
+    )
+
+
 def _build_application() -> Application:
-    builder = Application.builder().token(settings.telegram_bot_token.strip())
-    proxy = settings.telegram_proxy.strip()
-    if proxy:
-        builder = builder.proxy(proxy).get_updates_proxy(proxy)
+    builder = (
+        Application.builder()
+        .token(settings.telegram_bot_token.strip())
+        .request(_telegram_request(90, 90, 90))
+        .get_updates_request(_telegram_request(40, 30, 30))
+    )
     application = builder.build()
     register_handlers(application)
     return application
@@ -42,8 +58,9 @@ async def run_bot(stop_event: asyncio.Event) -> None:
         return
 
     while not stop_event.is_set():
-        application = _build_application()
+        application = None
         try:
+            application = _build_application()
             await application.initialize()
             await application.start()
             await application.bot.set_my_commands(
@@ -73,4 +90,5 @@ async def run_bot(stop_event: asyncio.Event) -> None:
             except asyncio.TimeoutError:
                 pass
         finally:
-            await _stop_application(application)
+            if application is not None:
+                await _stop_application(application)

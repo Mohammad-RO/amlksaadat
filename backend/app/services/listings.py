@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import AppError
 from app.models import Agent, Listing
-from app.services.archive import archive_images
+from app.services.archive import archive_configured, archive_images
 from app.services.divar import fetch_divar_post
 from app.services.llm import compose_listing_text, rewrite_description
 from app.utils import duplicate_message, extract_divar_token
@@ -77,8 +77,12 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         )
     if post.description and not listing.llm_used:
         warnings.append("متن توضیحات بدون بازنویسی مدل زبانی ذخیره شد.")
-    if post.image_urls and not file_ids:
-        warnings.append(
-            "عکس‌ها در کانال آرشیو تلگرام ذخیره نشدند. شناسه کانال خصوصی را در TELEGRAM_ARCHIVE_CHAT_ID قرار دهید و ربات را ادمین آن کانال کنید."
-        )
+    if post.image_urls and len(file_ids) < len(post.image_urls):
+        missing = len(post.image_urls) - len(file_ids)
+        if archive_configured():
+            warnings.append(f"{missing} عکس از {len(post.image_urls)} بعد از چند بار تلاش به کانال نرسید.")
+        else:
+            warnings.append(
+                "عکس‌ها در کانال آرشیو تلگرام ذخیره نشدند. شناسه کانال خصوصی را در TELEGRAM_ARCHIVE_CHAT_ID قرار دهید و ربات را ادمین آن کانال کنید."
+            )
     return listing, warnings

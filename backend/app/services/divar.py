@@ -80,9 +80,15 @@ def _best_value(pairs: list[tuple[str, str]], scorer) -> str | None:
     return best_value
 
 
+_PHOTO_ID = re.compile(
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+    re.IGNORECASE,
+)
+
+
 def _is_photo(url: str) -> bool:
     lower = url.lower()
-    if any(word in lower for word in ("logo", "icon", "sprite", "avatar", "emoji")):
+    if any(word in lower for word in ("logo", "icon", "sprite", "avatar", "emoji", "mapimage", "/imgs/")):
         return False
     return "divarcdn" in lower or bool(re.search(r"\.(jpg|jpeg|png|webp)(?:\?|$)", lower))
 
@@ -91,6 +97,32 @@ def _clean_image(url: str) -> str:
     if "divarcdn" in url.lower():
         return url.split("?")[0]
     return url
+
+
+def _photo_rank(url: str) -> int:
+    lower = url.lower()
+    if "thumbnail" in lower:
+        return 0
+    if "/webp_post/" in lower or "/post/" in lower:
+        return 2
+    return 1
+
+
+def _unique_photos(urls: list[str]) -> list[str]:
+    chosen: dict[str, tuple[int, str]] = {}
+    order: list[str] = []
+    for url in urls:
+        match = _PHOTO_ID.search(url)
+        key = match.group(1).lower() if match else url
+        rank = _photo_rank(url)
+        current = chosen.get(key)
+        if current is None:
+            chosen[key] = (rank, url)
+            order.append(key)
+            continue
+        if rank > current[0]:
+            chosen[key] = (rank, url)
+    return [chosen[key][1] for key in order]
 
 
 SPEC_WIDGETS = {
@@ -175,12 +207,7 @@ def parse_divar_post(payload: dict) -> DivarPost:
         price_number = None
     bedrooms_number = parse_number(bedrooms_raw) if bedrooms_raw else None
 
-    seen: set[str] = set()
-    unique_images: list[str] = []
-    for url in images:
-        if url not in seen:
-            seen.add(url)
-            unique_images.append(url)
+    unique_images = _unique_photos(images)
 
     description = max(texts, key=len) if texts else ""
     title = next((item for item in titles if item), "")
