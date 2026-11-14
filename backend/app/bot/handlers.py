@@ -6,6 +6,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 
 from app.database import SessionLocal
 from app.models import BuyerSession, Listing
+from app.services.llm import listing_details, listing_preview
 from app.services.matching import match_listings
 from app.utils import to_english_digits
 
@@ -158,22 +159,8 @@ def _bounds(skipped: bool, low, high):
     return (low, high)
 
 
-def _is_code_line(line: str) -> bool:
-    compact = line.replace(" ", "")
-    return compact.startswith("کد:") or compact.startswith("کد：")
-
-
 def _preview_listing(text: str) -> str:
-    kept: list[str] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("📝") or stripped == "توضیحات" or _is_code_line(stripped):
-            break
-        kept.append(line)
-        if "انبار" in stripped and (":" in stripped or "：" in stripped):
-            break
-    preview = "\n".join(kept).strip()
-    return preview or text.strip()
+    return listing_preview(text)
 
 
 def _clip(text: str) -> str:
@@ -193,7 +180,7 @@ async def _send_details(chat_id: int, code: str, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(chat_id, "آگهی با این کد پیدا نشد.")
             return
         agent = listing.agent
-        text = _clip(listing.structured_text)
+        text = _clip(listing_details(listing.structured_text))
         text = f"{text}\n\nمشاور: {agent.name}\nشماره تماس: {agent.phone}"
         await context.bot.send_message(chat_id, text)
         file_ids = list(listing.image_file_ids or [])

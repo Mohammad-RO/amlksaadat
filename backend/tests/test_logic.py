@@ -8,7 +8,7 @@ from app.database import Base
 from app.models import Agent, Listing
 from app.bot.handlers import _caption, _preview_listing
 from app.services.divar import parse_divar_post
-from app.services.llm import compose_listing_text
+from app.services.llm import compose_listing_text, listing_details
 from app.services.matching import match_listings
 from app.utils import (
     build_year_from_text,
@@ -151,28 +151,30 @@ class LogicTests(unittest.TestCase):
             ]
         )
         preview = _preview_listing(full)
-        self.assertIn("فروش آپارتمان", preview)
-        self.assertIn("انباری: دارد", preview)
-        self.assertNotIn("سند", preview)
-        self.assertNotIn("توضیحات", preview)
-        self.assertNotIn("12345678", preview)
-        without_storage = "\n".join(
+        self.assertEqual(
+            preview.splitlines(),
             [
                 "فروش آپارتمان",
-                "📐 متراژ: ۱۲۰",
                 "",
-                "📝 توضیحات",
-                "متن کامل",
-                "کد: 12345678",
-            ]
+                "📐 متراژ: ۱۲۰",
+                "🛏 اتاق: نامشخص",
+                "🏢 طبقه: نامشخص",
+                "🚪 تعداد واحد: نامشخص",
+                "🏗️ ساخت: نامشخص",
+                "💰 قیمت کل: نامشخص",
+                "📏 قیمت هر متر: نامشخص",
+            ],
         )
-        short = _preview_listing(without_storage)
-        self.assertIn("متراژ: ۱۲۰", short)
-        self.assertNotIn("متن کامل", short)
-        self.assertNotIn("12345678", short)
-        long_preview = "عنوان\n" + ("متن " * 400)
-        self.assertLessEqual(len(_caption(long_preview)), 1024)
-        self.assertTrue(_caption(long_preview).endswith("…"))
+        details = listing_details(full)
+        self.assertTrue(details.startswith(preview))
+        self.assertEqual(details.count("فروش آپارتمان"), 1)
+        self.assertIn("پارکینگ: دارد", details)
+        self.assertIn("انباری: دارد", details)
+        self.assertIn("سند: تک‌برگ", details)
+        self.assertIn("📝 توضیحات\nمتن کامل توضیحات", details)
+        self.assertIn("کد: 12345678", details)
+        self.assertEqual(details.count("متراژ:"), 1)
+        self.assertLessEqual(len(_caption("📐 متراژ: " + ("۱" * 2000))), 1024)
 
     def test_build_year_text(self):
         self.assertEqual(parse_build_year("نوساز", now_year=1405), 1405)
