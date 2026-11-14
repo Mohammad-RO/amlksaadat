@@ -250,6 +250,9 @@ class LogicTests(unittest.TestCase):
         self.assertEqual([item.unique_code for item in old], ["66666666"])
         brand_new = match_listings(db, age=(0, 1), now_year=1405)
         self.assertEqual([item.unique_code for item in brand_new], ["77777777"])
+        capped = [item.unique_code for item in match_listings(db, price=(None, 140_000_000_000), now_year=1405)]
+        self.assertIn("11111111", capped)
+        self.assertNotIn("77777777", capped)
         db.close()
 
     def test_jalali_report_bound(self):

@@ -29,16 +29,16 @@ AREA_CHOICES: dict[str, tuple[float, float | None] | None] = {
     "270 متر به بالا": (270, None),
     ANY: None,
 }
-PRICE_CHOICES: dict[str, tuple[int, int | None] | None] = {
-    "30 تا 50 میلیارد": (30 * BILLION, 50 * BILLION),
-    "50 تا 70 میلیارد": (50 * BILLION, 70 * BILLION),
-    "70 تا 90 میلیارد": (70 * BILLION, 90 * BILLION),
-    "90 تا 110 میلیارد": (90 * BILLION, 110 * BILLION),
-    "110 تا 140 میلیارد": (110 * BILLION, 140 * BILLION),
-    "140 تا 170 میلیارد": (140 * BILLION, 170 * BILLION),
-    "170 تا 200 میلیارد": (170 * BILLION, 200 * BILLION),
-    "200 تا 250 میلیارد": (200 * BILLION, 250 * BILLION),
-    "250 تا 300 میلیارد": (250 * BILLION, 300 * BILLION),
+PRICE_CHOICES: dict[str, tuple[int | None, int | None] | None] = {
+    "تا 50 میلیارد تومان": (None, 50 * BILLION),
+    "تا 70 میلیارد تومان": (None, 70 * BILLION),
+    "تا 90 میلیارد تومان": (None, 90 * BILLION),
+    "تا 110 میلیارد تومان": (None, 110 * BILLION),
+    "تا 140 میلیارد تومان": (None, 140 * BILLION),
+    "تا 170 میلیارد تومان": (None, 170 * BILLION),
+    "تا 200 میلیارد تومان": (None, 200 * BILLION),
+    "تا 250 میلیارد تومان": (None, 250 * BILLION),
+    "تا 300 میلیارد تومان": (None, 300 * BILLION),
     "300 میلیارد به بالا": (300 * BILLION, None),
     ANY: None,
 }
@@ -60,7 +60,7 @@ BEDROOM_CHOICES = {
     ANY: None,
 }
 AREA_PROMPT = "بازه متراژ را انتخاب کنید."
-PRICE_PROMPT = "بازه قیمت را انتخاب کنید."
+PRICE_PROMPT = "حداکثر قیمت را انتخاب کنید."
 AGE_PROMPT = "سن بنا را انتخاب کنید."
 BEDROOM_PROMPT = "تعداد خواب را انتخاب کنید."
 
