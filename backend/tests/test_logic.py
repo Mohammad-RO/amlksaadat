@@ -253,6 +253,46 @@ class LogicTests(unittest.TestCase):
         capped = [item.unique_code for item in match_listings(db, price=(None, 140_000_000_000), now_year=1405)]
         self.assertIn("11111111", capped)
         self.assertNotIn("77777777", capped)
+        near_price = Listing(
+            agent_id=agent.id,
+            divar_url="https://divar.ir/v/token-near",
+            divar_token="token-near",
+            title="خانه",
+            area=120,
+            price=145_000_000_000,
+            bedrooms=2,
+            building_year=1402,
+            raw_description="",
+            structured_text="کد: 88888888",
+            unique_code="88888888",
+            image_file_ids=[],
+            image_urls=[],
+            llm_used=False,
+        )
+        near_area = Listing(
+            agent_id=agent.id,
+            divar_url="https://divar.ir/v/token-edge",
+            divar_token="token-edge",
+            title="خانه",
+            area=94,
+            price=40_000_000_000,
+            bedrooms=2,
+            building_year=1402,
+            raw_description="",
+            structured_text="کد: 99999999",
+            unique_code="99999999",
+            image_file_ids=[],
+            image_urls=[],
+            llm_used=False,
+        )
+        db.add(near_price)
+        db.add(near_area)
+        db.commit()
+        widened_price = [item.unique_code for item in match_listings(db, price=(None, 140_000_000_000))]
+        self.assertIn("88888888", widened_price)
+        widened_area = [item.unique_code for item in match_listings(db, area=(70, 90), bedrooms=2)]
+        self.assertIn("99999999", widened_area)
+        self.assertNotIn("11111111", widened_area)
         db.close()
 
     def test_jalali_report_bound(self):
