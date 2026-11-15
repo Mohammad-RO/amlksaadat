@@ -39,6 +39,7 @@ class Listing(Base):
     price: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     bedrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     building_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    category: Mapped[str] = mapped_column(String(20), default="", nullable=False)
     raw_description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     structured_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     unique_code: Mapped[str] = mapped_column(String(8), unique=True, index=True, nullable=False)
@@ -71,4 +72,5 @@ class BuyerSession(Base):
     age_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     age_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     age_skipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    category: Mapped[str] = mapped_column(String(20), default="", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

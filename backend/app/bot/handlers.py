@@ -12,11 +12,14 @@ from app.utils import to_english_digits
 
 logger = logging.getLogger(__name__)
 
-BUY = "خرید خانه"
+BUY = "خرید"
 RESTART = "شروع دوباره"
 CONTINUE = "ادامه"
 BACK = "مرحله قبل"
 ANY = "مهم نیست"
+RESIDENTIAL = "مسکونی"
+COMMERCIAL = "اداری و تجاری"
+KIND_CHOICES = {RESIDENTIAL: "residential", COMMERCIAL: "commercial"}
 BILLION = 1_000_000_000
 AREA_CHOICES: dict[str, tuple[float, float | None] | None] = {
     "70 تا 90 متر": (70, 90),
@@ -59,6 +62,7 @@ BEDROOM_CHOICES = {
     "چهار خواب و بیشتر": (4, True),
     ANY: None,
 }
+KIND_PROMPT = "نوع ملک را انتخاب کنید."
 AREA_PROMPT = "بازه متراژ را انتخاب کنید."
 PRICE_PROMPT = "حداکثر قیمت را انتخاب کنید."
 AGE_PROMPT = "سن بنا را انتخاب کنید."
@@ -106,7 +110,11 @@ RESULT_MENU = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True,
 )
-AREA_KEYBOARD = _choice_keyboard(list(AREA_CHOICES), 2, with_back=False)
+KIND_KEYBOARD = ReplyKeyboardMarkup(
+    [_rtl_row([RESIDENTIAL, COMMERCIAL]), [KeyboardButton(RESTART)]],
+    resize_keyboard=True,
+)
+AREA_KEYBOARD = _choice_keyboard(list(AREA_CHOICES), 2, with_back=True)
 PRICE_KEYBOARD = _choice_keyboard(list(PRICE_CHOICES), 1, with_back=True)
 AGE_KEYBOARD = _choice_keyboard(list(AGE_CHOICES), 2, with_back=True)
 BEDROOM_KEYBOARD = _choice_keyboard(list(BEDROOM_CHOICES), 2, with_back=True)
@@ -147,6 +155,7 @@ def _save(row: BuyerSession) -> None:
         current.age_min = row.age_min
         current.age_max = row.age_max
         current.age_skipped = row.age_skipped
+        current.category = row.category
         current.chat_id = row.chat_id
         db.commit()
     finally:
@@ -249,6 +258,7 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
             bedrooms=None if row.bedrooms_skipped else row.bedrooms,
             bedrooms_or_more=bool(row.bedrooms_or_more),
             age=_bounds(row.age_skipped, row.age_min, row.age_max),
+            category=row.category or None,
         )
         payload = []
         for item in found:
@@ -268,16 +278,16 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
     if not payload:
         await context.bot.send_message(
             chat_id,
-            "خانه‌ای در بازه‌های انتخاب‌شده پیدا نشد.\n"
-            "می‌توانید دوباره «خرید خانه» را بزنید.",
+            "ملکی در بازه‌های انتخاب‌شده پیدا نشد.\n"
+            "می‌توانید دوباره «خرید» را بزنید.",
             reply_markup=RESULT_MENU,
         )
         return
 
     await context.bot.send_message(
         chat_id,
-        f"{len(payload)} خانه نزدیک به درخواست شما پیدا شد.\n"
-        "برای هر خانه عکس اول و مشخصات تا انباری نشان داده می‌شود.\n"
+        f"{len(payload)} ملک نزدیک به درخواست شما پیدا شد.\n"
+        "برای هر ملک عکس اول و مشخصات تا انباری نشان داده می‌شود.\n"
         "برای بقیه عکس‌ها، متن کامل و شماره مشاور، دکمه زیر آگهی را بزنید.",
         reply_markup=RESULT_MENU,
     )
@@ -286,7 +296,8 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
 
 
 def _reset_search(row: BuyerSession) -> None:
-    row.step = "area"
+    row.step = "kind"
+    row.category = ""
     row.area = None
     row.price = None
     row.bedrooms = None
@@ -317,6 +328,9 @@ def _store_range(row: BuyerSession, prefix: str, value) -> None:
 
 
 async def _resume(message, row: BuyerSession) -> None:
+    if row.step == "kind":
+        await message.reply_text(KIND_PROMPT, reply_markup=KIND_KEYBOARD)
+        return
     if row.step == "price":
         await message.reply_text(PRICE_PROMPT, reply_markup=PRICE_KEYBOARD)
         return
@@ -330,7 +344,7 @@ async def _resume(message, row: BuyerSession) -> None:
         await message.reply_text(AREA_PROMPT, reply_markup=AREA_KEYBOARD)
         return
     await message.reply_text(
-        "جستجویی در جریان نیست.\nبرای شروع، «شروع دوباره» یا «خرید خانه» را بزنید.",
+        "جستجویی در جریان نیست.\nبرای شروع، «شروع دوباره» یا «خرید» را بزنید.",
         reply_markup=MENU,
     )
 
@@ -352,10 +366,12 @@ async def _go_back(message, row: BuyerSession) -> None:
         await message.reply_text(AGE_PROMPT, reply_markup=AGE_KEYBOARD)
         return
     if row.step == "area":
-        await message.reply_text("متراژ اولین مرحله است.", reply_markup=AREA_KEYBOARD)
+        row.step = "kind"
+        _save(row)
+        await message.reply_text(KIND_PROMPT, reply_markup=KIND_KEYBOARD)
         return
     await message.reply_text(
-        "جستجویی در جریان نیست.\nبرای شروع، «شروع دوباره» یا «خرید خانه» را بزنید.",
+        "جستجویی در جریان نیست.\nبرای شروع، «شروع دوباره» یا «خرید» را بزنید.",
         reply_markup=MENU,
     )
 
@@ -369,10 +385,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _reset_search(row)
     await update.message.reply_text(
         "سلام.\n"
-        "بازه متراژ را انتخاب کنید.\n"
+        "نوع ملک را انتخاب کنید.\n"
         "هر زمان با «شروع دوباره» از نو شروع کنید، یا با «ادامه» به همان مرحله برگردید.\n"
         "اگر کد ۸ رقمی یک آگهی را دارید، همان را ارسال کنید.",
-        reply_markup=AREA_KEYBOARD,
+        reply_markup=KIND_KEYBOARD,
     )
 
 
@@ -410,13 +426,23 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     row = _session(update.effective_user.id, update.effective_chat.id)
     if text in {BUY, RESTART}:
         _reset_search(row)
-        await update.message.reply_text(AREA_PROMPT, reply_markup=AREA_KEYBOARD)
+        await update.message.reply_text(KIND_PROMPT, reply_markup=KIND_KEYBOARD)
         return
     if text == CONTINUE:
         await _resume(update.message, row)
         return
     if text == BACK:
         await _go_back(update.message, row)
+        return
+
+    if row.step == "kind":
+        if text not in KIND_CHOICES:
+            await update.message.reply_text("یکی از دو نوع ملک را انتخاب کنید.", reply_markup=KIND_KEYBOARD)
+            return
+        row.category = KIND_CHOICES[text]
+        row.step = "area"
+        _save(row)
+        await update.message.reply_text(AREA_PROMPT, reply_markup=AREA_KEYBOARD)
         return
 
     if row.step == "area":
@@ -472,7 +498,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await update.message.reply_text(
-        "«خرید خانه» یا «شروع دوباره» را بزنید، یا کد ۸ رقمی آگهی را ارسال کنید.",
+        "«خرید» یا «شروع دوباره» را بزنید، یا کد ۸ رقمی آگهی را ارسال کنید.",
         reply_markup=MENU,
     )
 

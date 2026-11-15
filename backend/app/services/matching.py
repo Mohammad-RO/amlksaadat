@@ -22,8 +22,11 @@ def match_listings(
     bedrooms_or_more: bool = False,
     age: tuple[int | None, int | None] | None = None,
     now_year: int | None = None,
+    category: str | None = None,
 ) -> list[Listing]:
     query = db.query(Listing)
+    if category:
+        query = query.filter(Listing.category == category)
     if area is not None:
         area = _expand_bounds(*area, lower=True, upper=True)
         low, high = area

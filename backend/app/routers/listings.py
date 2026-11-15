@@ -11,6 +11,11 @@ from app.utils import format_jalali
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
+CATEGORY_LABELS = {
+    "residential": "مسکونی",
+    "commercial": "اداری و تجاری",
+}
+
 
 def _out(listing: Listing, warnings: list[str] | None = None) -> ListingOut:
     return ListingOut(
@@ -21,10 +26,16 @@ def _out(listing: Listing, warnings: list[str] | None = None) -> ListingOut:
         area=listing.area,
         price=listing.price,
         bedrooms=listing.bedrooms,
+        category=CATEGORY_LABELS.get(listing.category, ""),
         structured_text=listing.structured_text,
         unique_code=listing.unique_code,
         llm_used=listing.llm_used,
-        searchable=listing.area is not None and listing.price is not None and listing.bedrooms is not None,
+        searchable=(
+            listing.area is not None
+            and listing.price is not None
+            and listing.bedrooms is not None
+            and listing.category in CATEGORY_LABELS
+        ),
         image_count=max(len(listing.image_file_ids or []), len(listing.image_urls or [])),
         archived=bool(listing.image_file_ids),
         created_at_jalali=format_jalali(listing.created_at),

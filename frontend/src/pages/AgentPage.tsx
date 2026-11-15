@@ -130,6 +130,9 @@ export function AgentPage() {
                     onClick={() => toggle(item.id)}
                   >
                     <h3 className="min-w-0 flex-1 font-semibold leading-7">{item.title}</h3>
+                    {item.category && (
+                      <span className="shrink-0 rounded-full bg-sand px-3 py-1 text-xs">{item.category}</span>
+                    )}
                     <svg
                       viewBox="0 0 20 20"
                       aria-hidden="true"

@@ -66,6 +66,7 @@ class ListingOut(BaseModel):
     area: float | None
     price: int | None
     bedrooms: int | None
+    category: str
     structured_text: str
     unique_code: str
     llm_used: bool

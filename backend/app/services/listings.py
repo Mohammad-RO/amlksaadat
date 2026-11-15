@@ -32,6 +32,8 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         raise AppError(duplicate_message(existing.agent.name, existing.created_at), 409)
 
     post = await fetch_divar_post(token)
+    if post.category not in {"residential", "commercial"}:
+        raise AppError("دسته این آگهی در دیوار مسکونی یا اداری و تجاری نیست.", 400)
     rewritten, llm_used = await rewrite_description(post.description)
     code = _unique_code(db)
     structured = compose_listing_text(post, rewritten).rstrip()
@@ -48,6 +50,7 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         price=post.price,
         bedrooms=post.bedrooms,
         building_year=post.building_year,
+        category=post.category,
         raw_description=post.description,
         structured_text=structured,
         unique_code=code,

@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import Agent, Listing
 from app.bot.handlers import _caption, _preview_listing
-from app.services.divar import parse_divar_post
+from app.services.divar import category_from_payload, parse_divar_post
 from app.services.llm import compose_listing_text, images_belong_to_listing, listing_details
 from app.services.matching import match_listings
 from app.utils import (
@@ -193,6 +193,12 @@ class LogicTests(unittest.TestCase):
         self.assertIn("📐 متراژ: ۱۲۰", hidden)
         self.assertLessEqual(len(_caption("📐 متراژ: " + ("۱" * 2000))), 1024)
 
+    def test_divar_category(self):
+        self.assertEqual(category_from_payload({"webengage": {"cat_2": "residential-sell"}}), "residential")
+        self.assertEqual(category_from_payload({"analytics": {"cat2": "commercial-sell"}}), "commercial")
+        self.assertEqual(category_from_payload({"webengage": {"cat_2": "residential-rent"}}), "residential")
+        self.assertEqual(category_from_payload(SAMPLE), "")
+
     def test_build_year_text(self):
         self.assertEqual(parse_build_year("نوساز", now_year=1405), 1405)
         self.assertEqual(parse_build_year("۵ سال", now_year=1405), 1400)
@@ -209,7 +215,7 @@ class LogicTests(unittest.TestCase):
         db.add(agent)
         db.flush()
 
-        def add(area, price, bedrooms, code, token, year=1402):
+        def add(area, price, bedrooms, code, token, year=1402, category="residential"):
             db.add(
                 Listing(
                     agent_id=agent.id,
@@ -220,6 +226,7 @@ class LogicTests(unittest.TestCase):
                     price=price,
                     bedrooms=bedrooms,
                     building_year=year,
+                    category=category,
                     raw_description="",
                     structured_text=f"کد: {code}",
                     unique_code=code,
@@ -236,6 +243,7 @@ class LogicTests(unittest.TestCase):
         add(120, 40_000_000_000, 4, "55555555", "token-four", 1402)
         add(120, 40_000_000_000, 5, "66666666", "token-five", 1370)
         add(300, 350_000_000_000, 2, "77777777", "token-large", 1405)
+        add(50, 40_000_000_000, 2, "10101010", "token-office", 1402, "commercial")
         db.commit()
 
         inside = match_listings(
@@ -310,6 +318,11 @@ class LogicTests(unittest.TestCase):
         widened_area = [item.unique_code for item in match_listings(db, area=(70, 90), bedrooms=2)]
         self.assertIn("99999999", widened_area)
         self.assertNotIn("11111111", widened_area)
+        homes = [item.unique_code for item in match_listings(db, category="residential")]
+        offices = [item.unique_code for item in match_listings(db, category="commercial")]
+        self.assertIn("11111111", homes)
+        self.assertNotIn("10101010", homes)
+        self.assertEqual(offices, ["10101010"])
         db.close()
 
     def test_jalali_report_bound(self):

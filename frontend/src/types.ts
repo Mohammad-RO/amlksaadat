@@ -34,6 +34,7 @@ export type Listing = {
   area: number | null;
   price: number | null;
   bedrooms: number | null;
+  category: string;
   structured_text: string;
   unique_code: string;
   llm_used: boolean;

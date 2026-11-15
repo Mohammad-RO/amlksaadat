@@ -31,6 +31,7 @@ class DivarPost:
     building_year: int | None
     image_urls: list[str]
     specs: list[tuple[str, str]]
+    category: str = ""
 
 
 def _score_area(title: str) -> int:
@@ -194,6 +195,23 @@ def _collect(payload: object) -> tuple[list[tuple[str, str]], list[str], list[st
     return pairs, texts, images, titles
 
 
+def category_from_payload(payload: dict) -> str:
+    slugs: list[str] = []
+    webengage = payload.get("webengage")
+    if isinstance(webengage, dict):
+        slugs.append(str(webengage.get("cat_2") or ""))
+    analytics = payload.get("analytics")
+    if isinstance(analytics, dict):
+        slugs.append(str(analytics.get("cat2") or ""))
+    for slug in slugs:
+        kind = slug.strip().lower()
+        if kind.startswith("residential"):
+            return "residential"
+        if kind.startswith("commercial"):
+            return "commercial"
+    return ""
+
+
 def parse_divar_post(payload: dict) -> DivarPost:
     pairs, texts, images, titles = _collect(payload)
     area_raw = _best_value(pairs, _score_area)
@@ -227,6 +245,7 @@ def parse_divar_post(payload: dict) -> DivarPost:
         building_year=parse_build_year(year_raw),
         image_urls=unique_images[:10],
         specs=specs,
+        category=category_from_payload(payload),
     )
 
 

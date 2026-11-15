@@ -53,6 +53,8 @@ def init_db() -> None:
             _ensure_column(connection, "buyer_sessions", "age_max", "INTEGER")
             _ensure_column(connection, "buyer_sessions", "age_skipped", "BOOLEAN NOT NULL DEFAULT 0")
             _ensure_column(connection, "listings", "building_year", "INTEGER")
+            _ensure_column(connection, "listings", "category", "VARCHAR(20) NOT NULL DEFAULT ''")
+            _ensure_column(connection, "buyer_sessions", "category", "VARCHAR(20) NOT NULL DEFAULT ''")
     _backfill_building_years()
 
 
