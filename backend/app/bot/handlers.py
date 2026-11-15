@@ -104,10 +104,7 @@ MENU = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 RESULT_MENU = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton(BUY)],
-        [KeyboardButton(RESTART)],
-    ],
+    [[KeyboardButton(RESTART)]],
     resize_keyboard=True,
 )
 KIND_KEYBOARD = ReplyKeyboardMarkup(
@@ -279,7 +276,7 @@ async def _show_matches(chat_id: int, row: BuyerSession, context: ContextTypes.D
         await context.bot.send_message(
             chat_id,
             "ملکی در بازه‌های انتخاب‌شده پیدا نشد.\n"
-            "می‌توانید دوباره «خرید» را بزنید.",
+            "می‌توانید با «شروع دوباره» جستجوی تازه‌ای را آغاز کنید.",
             reply_markup=RESULT_MENU,
         )
         return
