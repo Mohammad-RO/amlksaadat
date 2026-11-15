@@ -6,7 +6,7 @@ from app.errors import AppError
 from app.models import Agent, Listing
 from app.services.archive import archive_configured, archive_images
 from app.services.divar import fetch_divar_post
-from app.services.llm import compose_listing_text, rewrite_description
+from app.services.llm import compose_listing_text, images_belong_to_listing, rewrite_description
 from app.utils import duplicate_message, extract_divar_token
 
 
@@ -36,7 +36,8 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
     code = _unique_code(db)
     structured = compose_listing_text(post, rewritten).rstrip()
     structured = f"{structured}\n\nکد: {code}" if structured else f"کد: {code}"
-    file_ids = await archive_images(post.image_urls)
+    image_urls = [] if not images_belong_to_listing(post.specs) else list(post.image_urls)
+    file_ids = await archive_images(image_urls)
 
     listing = Listing(
         agent_id=agent.id,
@@ -51,7 +52,7 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         structured_text=structured,
         unique_code=code,
         image_file_ids=file_ids,
-        image_urls=post.image_urls,
+        image_urls=image_urls,
         llm_used=llm_used,
     )
     db.add(listing)
@@ -77,10 +78,10 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         )
     if post.description and not listing.llm_used:
         warnings.append("متن توضیحات بدون بازنویسی مدل زبانی ذخیره شد.")
-    if post.image_urls and len(file_ids) < len(post.image_urls):
-        missing = len(post.image_urls) - len(file_ids)
+    if image_urls and len(file_ids) < len(image_urls):
+        missing = len(image_urls) - len(file_ids)
         if archive_configured():
-            warnings.append(f"{missing} عکس از {len(post.image_urls)} بعد از چند بار تلاش به کانال نرسید.")
+            warnings.append(f"{missing} عکس از {len(image_urls)} بعد از چند بار تلاش به کانال نرسید.")
         else:
             warnings.append(
                 "عکس‌ها در کانال آرشیو تلگرام ذخیره نشدند. شناسه کانال خصوصی را در TELEGRAM_ARCHIVE_CHAT_ID قرار دهید و ربات را ادمین آن کانال کنید."

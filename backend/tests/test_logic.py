@@ -8,7 +8,7 @@ from app.database import Base
 from app.models import Agent, Listing
 from app.bot.handlers import _caption, _preview_listing
 from app.services.divar import parse_divar_post
-from app.services.llm import compose_listing_text, listing_details
+from app.services.llm import compose_listing_text, images_belong_to_listing, listing_details
 from app.services.matching import match_listings
 from app.utils import (
     build_year_from_text,
@@ -174,6 +174,23 @@ class LogicTests(unittest.TestCase):
         self.assertIn("📝 توضیحات\nمتن کامل توضیحات", details)
         self.assertIn("کد: 12345678", details)
         self.assertEqual(details.count("متراژ:"), 1)
+        owned = "\n".join([full, "🖼 تصویرها برای همین ملک است؟: منفی"])
+        self.assertNotIn("تصویرها برای همین ملک", listing_details(owned))
+        self.assertTrue(images_belong_to_listing([("تصویرها برای همین ملک است؟", "بله")]))
+        self.assertFalse(images_belong_to_listing([("تصویرها برای همین ملک است؟", "منفی")]))
+        self.assertTrue(images_belong_to_listing([("متراژ", "۱۲۰")]))
+        self.assertFalse(
+            images_belong_to_listing([("تصویر\u200cها برای همین ملک است؟", "خیر")])
+        )
+        self.assertFalse(
+            images_belong_to_listing([("تصاویر برای همین ملک است؟", "\u200fمنفی")])
+        )
+        stored = "\n".join([full, "• تصویر\u200cها برای همین ملک است؟: خیر"])
+        hidden = listing_details(stored)
+        self.assertNotIn("همین ملک", hidden)
+        self.assertIn("• تصویر\u200cها برای همین ملک است؟: خیر", stored)
+        self.assertIn("پارکینگ: دارد", hidden)
+        self.assertIn("📐 متراژ: ۱۲۰", hidden)
         self.assertLessEqual(len(_caption("📐 متراژ: " + ("۱" * 2000))), 1024)
 
     def test_build_year_text(self):

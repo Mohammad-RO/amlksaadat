@@ -150,9 +150,49 @@ def listing_preview(text: str) -> str:
     return f"{headline}\n\n{facts}"
 
 
+def _match_text(text: str) -> str:
+    folded = (
+        text.replace("\u200c", "")
+        .replace("\u200d", "")
+        .replace("\u200b", "")
+        .replace("\ufeff", "")
+        .replace("\u200e", "")
+        .replace("\u200f", "")
+        .replace("\u0640", "")
+        .replace("ي", "ی")
+        .replace("ك", "ک")
+        .replace("ة", "ه")
+    )
+    return re.sub(r"[^\w]", "", folded, flags=re.UNICODE)
+
+
+def _is_image_ownership_title(title: str) -> bool:
+    folded = _match_text(title)
+    return ("تصویر" in folded or "تصاویر" in folded) and "همینملک" in folded
+
+
+def _answer_rejects_images(value: str) -> bool:
+    answer = _match_text(value)
+    return answer.startswith("منفی") or answer.startswith("خیر") or answer == "نه"
+
+
+def images_belong_to_listing(specs: list[tuple[str, str]]) -> bool:
+    for title, value in specs:
+        if not _is_image_ownership_title(title):
+            continue
+        if _answer_rejects_images(value):
+            return False
+        return True
+    return True
+
+
+def _is_image_ownership_line(line: str) -> bool:
+    return _is_image_ownership_title(line)
+
+
 def _is_kept_detail_line(line: str) -> bool:
     stripped = line.strip()
-    if not stripped:
+    if not stripped or _is_image_ownership_line(stripped):
         return False
     compact = stripped.replace(" ", "")
     if stripped.startswith("📝") or stripped == "توضیحات" or compact.startswith("کد:") or compact.startswith("کد："):
@@ -183,7 +223,12 @@ def compose_listing_text(post: DivarPost, description: str) -> str:
     parts: list[str] = []
     if post.title:
         parts.append(post.title)
-    spec_lines = [f"{icon_for(title)} {title}: {value}" for title, value in post.specs]
+    visible_specs = [
+        (title, value)
+        for title, value in post.specs
+        if not _is_image_ownership_title(title)
+    ]
+    spec_lines = [f"{icon_for(title)} {title}: {value}" for title, value in visible_specs]
     if spec_lines:
         parts.append("\n".join(spec_lines))
     cleaned = description.strip()
