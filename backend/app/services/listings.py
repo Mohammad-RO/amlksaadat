@@ -19,6 +19,18 @@ def _unique_code(db: Session) -> str:
     raise AppError("ساخت کد یکتا ممکن نشد. دوباره تلاش کنید.", 500)
 
 
+def _searchable(listing: Listing) -> bool:
+    if listing.category not in {"residential", "commercial"}:
+        return False
+    if listing.deal_type not in {"sell", "rent"}:
+        return False
+    if listing.area is None or listing.bedrooms is None or listing.building_year is None:
+        return False
+    if listing.deal_type == "sell":
+        return listing.price is not None
+    return listing.deposit is not None and listing.rent is not None
+
+
 async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[Listing, list[str]]:
     raw_url = divar_url.strip()
     if "divar.ir" not in raw_url.lower():
@@ -32,8 +44,8 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         raise AppError(duplicate_message(existing.agent.name, existing.created_at), 409)
 
     post = await fetch_divar_post(token)
-    if post.category not in {"residential", "commercial"}:
-        raise AppError("دسته این آگهی در دیوار مسکونی یا اداری و تجاری نیست.", 400)
+    if post.category not in {"residential", "commercial"} or post.deal_type not in {"sell", "rent"}:
+        raise AppError("دسته این آگهی در دیوار جزو فروش یا اجارهٔ مسکونی و اداری نیست.", 400)
     rewritten, llm_used = await rewrite_description(post.description)
     code = _unique_code(db)
     structured = compose_listing_text(post, rewritten).rstrip()
@@ -51,6 +63,9 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         bedrooms=post.bedrooms,
         building_year=post.building_year,
         category=post.category,
+        deal_type=post.deal_type,
+        deposit=post.deposit,
+        rent=post.rent,
         raw_description=post.description,
         structured_text=structured,
         unique_code=code,
@@ -70,12 +85,7 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
     db.refresh(listing)
 
     warnings: list[str] = []
-    if (
-        listing.area is None
-        or listing.price is None
-        or listing.bedrooms is None
-        or listing.building_year is None
-    ):
+    if not _searchable(listing):
         warnings.append(
             "بعضی از مشخصات از دیوار خوانده نشد. اگر خریدار همان مورد را انتخاب کند، این آگهی در نتایج نمی‌آید."
         )

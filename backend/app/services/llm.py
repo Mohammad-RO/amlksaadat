@@ -35,6 +35,9 @@ ICON_RULES = (
     ("سن بنا", "🏗️"),
     ("قیمت کل", "💰"),
     ("قیمت", "💰"),
+    ("ودیعه و اجاره", "🔄"),
+    ("ودیعه", "💰"),
+    ("اجاره", "💵"),
     ("طبقه", "🏢"),
     ("آسانسور", "🛗"),
     ("پارکینگ", "🅿️"),
@@ -65,14 +68,21 @@ def icon_for(title: str) -> str:
     return "•"
 
 
-_FACT_FIELDS = (
+_SHARED_FACT_FIELDS = (
     ("متراژ", ("متراژ",), ()),
     ("اتاق", ("اتاق", "خواب"), ()),
     ("طبقه", ("طبقه",), ("واحد",)),
     ("تعداد واحد", ("تعداد واحد", "واحد"), ("طبقه",)),
     ("ساخت", ("سال ساخت", "سن بنا", "ساخت"), ()),
+)
+_SELL_FACT_FIELDS = _SHARED_FACT_FIELDS + (
     ("قیمت کل", ("قیمت کل", "قیمت"), ("متر",)),
     ("قیمت هر متر", ("هر متر", "متری"), ()),
+)
+_RENT_FACT_FIELDS = _SHARED_FACT_FIELDS + (
+    ("ودیعه", ("ودیعه",), ("اجاره",)),
+    ("اجاره ماهانه", ("اجاره ماهانه", "اجارهٔ ماهانه", "اجاره"), ("ودیعه", "تبدیل")),
+    ("ودیعه و اجاره", ("ودیعه و اجاره",), ()),
 )
 
 
@@ -88,8 +98,8 @@ def _line_title(line: str) -> str | None:
     return title or None
 
 
-def _is_fact_title(title: str) -> bool:
-    for _label, keys, blocked in _FACT_FIELDS:
+def _is_fact_title(title: str, fields: tuple = _SELL_FACT_FIELDS) -> bool:
+    for _label, keys, blocked in fields:
         if any(key in title for key in keys) and not any(word in title for word in blocked):
             return True
     return False
@@ -111,6 +121,19 @@ def _spec_pairs_from_text(text: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def _looks_like_rent(pairs: list[tuple[str, str]]) -> bool:
+    for title, _value in pairs:
+        if "ودیعه" in title:
+            return True
+        if "اجاره" in title and "قیمت" not in title:
+            return True
+    return False
+
+
+def _fact_fields_for(pairs: list[tuple[str, str]]):
+    return _RENT_FACT_FIELDS if _looks_like_rent(pairs) else _SELL_FACT_FIELDS
+
+
 def _fact_value(pairs: list[tuple[str, str]], keys: tuple[str, ...], blocked: tuple[str, ...]) -> str | None:
     for key in keys:
         for title, value in pairs:
@@ -122,7 +145,7 @@ def _fact_value(pairs: list[tuple[str, str]], keys: tuple[str, ...], blocked: tu
 def listing_facts(text: str) -> str:
     pairs = _spec_pairs_from_text(text)
     lines = []
-    for label, keys, blocked in _FACT_FIELDS:
+    for label, keys, blocked in _fact_fields_for(pairs):
         value = _fact_value(pairs, keys, blocked) or "نامشخص"
         lines.append(f"{icon_for(label)} {label}: {value}")
     return "\n".join(lines)
@@ -190,7 +213,7 @@ def _is_image_ownership_line(line: str) -> bool:
     return _is_image_ownership_title(line)
 
 
-def _is_kept_detail_line(line: str) -> bool:
+def _is_kept_detail_line(line: str, fact_fields: tuple) -> bool:
     stripped = line.strip()
     if not stripped or _is_image_ownership_line(stripped):
         return False
@@ -198,7 +221,7 @@ def _is_kept_detail_line(line: str) -> bool:
     if stripped.startswith("📝") or stripped == "توضیحات" or compact.startswith("کد:") or compact.startswith("کد："):
         return True
     title = _line_title(stripped)
-    if title is not None and _is_fact_title(title):
+    if title is not None and _is_fact_title(title, fact_fields):
         return False
     return True
 
@@ -206,9 +229,10 @@ def _is_kept_detail_line(line: str) -> bool:
 def listing_details(text: str) -> str:
     preview = listing_preview(text)
     headline = listing_headline(text)
+    fact_fields = _fact_fields_for(_spec_pairs_from_text(text))
     rest = []
     for line in text.splitlines():
-        if not _is_kept_detail_line(line):
+        if not _is_kept_detail_line(line, fact_fields):
             continue
         if headline and line.strip() == headline:
             continue

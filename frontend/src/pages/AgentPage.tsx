@@ -130,9 +130,14 @@ export function AgentPage() {
                     onClick={() => toggle(item.id)}
                   >
                     <h3 className="min-w-0 flex-1 font-semibold leading-7">{item.title}</h3>
-                    {item.category && (
-                      <span className="shrink-0 rounded-full bg-sand px-3 py-1 text-xs">{item.category}</span>
-                    )}
+                    <span className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      {item.deal_type && (
+                        <span className="rounded-full bg-sand px-3 py-1 text-xs">{item.deal_type}</span>
+                      )}
+                      {item.category && (
+                        <span className="rounded-full bg-sand px-3 py-1 text-xs">{item.category}</span>
+                      )}
+                    </span>
                     <svg
                       viewBox="0 0 20 20"
                       aria-hidden="true"
@@ -156,9 +161,20 @@ export function AgentPage() {
                       </div>
                       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                         <div className="rounded-2xl bg-sand px-3 py-2">متراژ: {field(item.area, "متر")}</div>
-                        <div className="rounded-2xl bg-sand px-3 py-2">
-                          قیمت: {item.price === null ? "نامشخص" : `${money.format(item.price)} تومان`}
-                        </div>
+                        {item.deal_type === "اجاره" ? (
+                          <>
+                            <div className="rounded-2xl bg-sand px-3 py-2">
+                              رهن: {item.deposit === null ? "نامشخص" : `${money.format(item.deposit)} تومان`}
+                            </div>
+                            <div className="rounded-2xl bg-sand px-3 py-2">
+                              اجاره: {item.rent === null ? "نامشخص" : `${money.format(item.rent)} تومان`}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="rounded-2xl bg-sand px-3 py-2">
+                            قیمت: {item.price === null ? "نامشخص" : `${money.format(item.price)} تومان`}
+                          </div>
+                        )}
                         <div className="rounded-2xl bg-sand px-3 py-2">خواب: {item.bedrooms ?? "نامشخص"}</div>
                       </dl>
                       <pre className="mt-4 whitespace-pre-wrap rounded-2xl bg-sand/70 px-4 py-3 text-sm leading-7">

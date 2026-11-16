@@ -67,6 +67,9 @@ class ListingOut(BaseModel):
     price: int | None
     bedrooms: int | None
     category: str
+    deal_type: str
+    deposit: int | None = None
+    rent: int | None = None
     structured_text: str
     unique_code: str
     llm_used: bool

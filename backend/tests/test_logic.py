@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import Agent, Listing
 from app.bot.handlers import _caption, _preview_listing
-from app.services.divar import category_from_payload, parse_divar_post
+from app.services.divar import category_from_payload, parse_divar_post, taxonomy_from_payload
 from app.services.llm import compose_listing_text, images_belong_to_listing, listing_details
 from app.services.matching import match_listings
 from app.utils import (
@@ -192,12 +192,80 @@ class LogicTests(unittest.TestCase):
         self.assertIn("پارکینگ: دارد", hidden)
         self.assertIn("📐 متراژ: ۱۲۰", hidden)
         self.assertLessEqual(len(_caption("📐 متراژ: " + ("۱" * 2000))), 1024)
+        rent = "\n".join(
+            [
+                "اجاره آپارتمان",
+                "",
+                "📐 متراژ: ۱۱۰",
+                "💰 ودیعه: ۲٬۰۰۰٬۰۰۰٬۰۰۰ تومان",
+                "💵 اجارهٔ ماهانه: ۱۲۰٬۰۰۰٬۰۰۰ تومان",
+                "• ودیعه و اجاره: غیر قابل تبدیل",
+                "🅿️ پارکینگ: دارد",
+                "",
+                "📝 توضیحات",
+                "متن اجاره",
+                "",
+                "کد: 87654321",
+            ]
+        )
+        rent_preview = _preview_listing(rent)
+        self.assertEqual(
+            rent_preview.splitlines(),
+            [
+                "اجاره آپارتمان",
+                "",
+                "📐 متراژ: ۱۱۰",
+                "🛏 اتاق: نامشخص",
+                "🏢 طبقه: نامشخص",
+                "🚪 تعداد واحد: نامشخص",
+                "🏗️ ساخت: نامشخص",
+                "💰 ودیعه: ۲٬۰۰۰٬۰۰۰٬۰۰۰ تومان",
+                "💵 اجاره ماهانه: ۱۲۰٬۰۰۰٬۰۰۰ تومان",
+                "🔄 ودیعه و اجاره: غیر قابل تبدیل",
+            ],
+        )
+        self.assertNotIn("قیمت کل", rent_preview)
+        self.assertNotIn("قیمت هر متر", rent_preview)
+        rent_details = listing_details(rent)
+        self.assertTrue(rent_details.startswith(rent_preview))
+        self.assertIn("پارکینگ: دارد", rent_details)
+        self.assertEqual(rent_details.count("ودیعه:"), 1)
+        self.assertEqual(rent_details.count("اجاره ماهانه:"), 1)
 
     def test_divar_category(self):
         self.assertEqual(category_from_payload({"webengage": {"cat_2": "residential-sell"}}), "residential")
         self.assertEqual(category_from_payload({"analytics": {"cat2": "commercial-sell"}}), "commercial")
         self.assertEqual(category_from_payload({"webengage": {"cat_2": "residential-rent"}}), "residential")
         self.assertEqual(category_from_payload(SAMPLE), "")
+        self.assertEqual(taxonomy_from_payload({"webengage": {"cat_2": "residential-sell"}}), ("residential", "sell"))
+        self.assertEqual(taxonomy_from_payload({"webengage": {"cat_2": "commercial-rent"}}), ("commercial", "rent"))
+        rent_payload = {
+            "webengage": {"cat_2": "residential-rent"},
+            "sections": [
+                {
+                    "widgets": [
+                        {
+                            "widget_type": "UNEXPANDABLE_ROW",
+                            "data": {"title": "ودیعه", "value": "۲٬۰۰۰٬۰۰۰٬۰۰۰ تومان"},
+                        },
+                        {
+                            "widget_type": "UNEXPANDABLE_ROW",
+                            "data": {"title": "اجارهٔ ماهانه", "value": "۱۲۰٬۰۰۰٬۰۰۰ تومان"},
+                        },
+                        {
+                            "widget_type": "UNEXPANDABLE_ROW",
+                            "data": {"title": "متراژ", "value": "۱۱۰"},
+                        },
+                    ]
+                }
+            ],
+        }
+        rent_post = parse_divar_post(rent_payload)
+        self.assertEqual(rent_post.deal_type, "rent")
+        self.assertEqual(rent_post.category, "residential")
+        self.assertEqual(rent_post.deposit, 2_000_000_000)
+        self.assertEqual(rent_post.rent, 120_000_000)
+        self.assertIsNone(rent_post.price)
 
     def test_build_year_text(self):
         self.assertEqual(parse_build_year("نوساز", now_year=1405), 1405)
@@ -215,7 +283,18 @@ class LogicTests(unittest.TestCase):
         db.add(agent)
         db.flush()
 
-        def add(area, price, bedrooms, code, token, year=1402, category="residential"):
+        def add(
+            area,
+            price,
+            bedrooms,
+            code,
+            token,
+            year=1402,
+            category="residential",
+            deal_type="sell",
+            deposit=None,
+            rent=None,
+        ):
             db.add(
                 Listing(
                     agent_id=agent.id,
@@ -227,6 +306,9 @@ class LogicTests(unittest.TestCase):
                     bedrooms=bedrooms,
                     building_year=year,
                     category=category,
+                    deal_type=deal_type,
+                    deposit=deposit,
+                    rent=rent,
                     raw_description="",
                     structured_text=f"کد: {code}",
                     unique_code=code,
@@ -244,6 +326,8 @@ class LogicTests(unittest.TestCase):
         add(120, 40_000_000_000, 5, "66666666", "token-five", 1370)
         add(300, 350_000_000_000, 2, "77777777", "token-large", 1405)
         add(50, 40_000_000_000, 2, "10101010", "token-office", 1402, "commercial")
+        add(110, None, 2, "12121212", "token-rent", 1402, "residential", "rent", 2_000_000_000, 120_000_000)
+        add(90, None, 2, "13131313", "token-rent-zero", 1402, "residential", "rent", 5_000_000_000, 0)
         db.commit()
 
         inside = match_listings(
@@ -287,6 +371,8 @@ class LogicTests(unittest.TestCase):
             price=145_000_000_000,
             bedrooms=2,
             building_year=1402,
+            category="residential",
+            deal_type="sell",
             raw_description="",
             structured_text="کد: 88888888",
             unique_code="88888888",
@@ -303,6 +389,8 @@ class LogicTests(unittest.TestCase):
             price=40_000_000_000,
             bedrooms=2,
             building_year=1402,
+            category="residential",
+            deal_type="sell",
             raw_description="",
             structured_text="کد: 99999999",
             unique_code="99999999",
@@ -318,11 +406,28 @@ class LogicTests(unittest.TestCase):
         widened_area = [item.unique_code for item in match_listings(db, area=(70, 90), bedrooms=2)]
         self.assertIn("99999999", widened_area)
         self.assertNotIn("11111111", widened_area)
-        homes = [item.unique_code for item in match_listings(db, category="residential")]
-        offices = [item.unique_code for item in match_listings(db, category="commercial")]
+        homes = [item.unique_code for item in match_listings(db, category="residential", deal_type="sell")]
+        offices = [item.unique_code for item in match_listings(db, category="commercial", deal_type="sell")]
         self.assertIn("11111111", homes)
         self.assertNotIn("10101010", homes)
+        self.assertNotIn("12121212", homes)
         self.assertEqual(offices, ["10101010"])
+        rented = [
+            item.unique_code
+            for item in match_listings(
+                db,
+                deal_type="rent",
+                category="residential",
+                deposit=(None, 3_000_000_000),
+                rent=(None, 150_000_000),
+            )
+        ]
+        self.assertEqual(rented, ["12121212"])
+        zero_rent = [
+            item.unique_code
+            for item in match_listings(db, deal_type="rent", category="residential", rent=(0, 0))
+        ]
+        self.assertEqual(zero_rent, ["13131313"])
         db.close()
 
     def test_jalali_report_bound(self):

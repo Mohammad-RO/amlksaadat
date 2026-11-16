@@ -35,6 +35,9 @@ export type Listing = {
   price: number | null;
   bedrooms: number | null;
   category: string;
+  deal_type: string;
+  deposit: number | null;
+  rent: number | null;
   structured_text: string;
   unique_code: string;
   llm_used: boolean;

@@ -32,6 +32,9 @@ class DivarPost:
     image_urls: list[str]
     specs: list[tuple[str, str]]
     category: str = ""
+    deal_type: str = ""
+    deposit: int | None = None
+    rent: int | None = None
 
 
 def _score_area(title: str) -> int:
@@ -68,6 +71,28 @@ def _score_price(title: str) -> int:
     if "قیمت" in title:
         return 2
     return 0
+
+
+def _score_deposit(title: str) -> int:
+    if "تبدیل" in title:
+        return 0
+    if title.strip() in {"ودیعه", "رهن"}:
+        return 4
+    if "ودیعه" in title and "اجاره" not in title:
+        return 3
+    if "رهن" in title and "اجاره" not in title:
+        return 2
+    return 0
+
+
+def _score_rent(title: str) -> int:
+    if "ودیعه" in title or "تبدیل" in title:
+        return 0
+    if "اجاره" not in title:
+        return 0
+    if "ماهانه" in title:
+        return 4
+    return 3
 
 
 def _best_value(pairs: list[tuple[str, str]], scorer) -> str | None:
@@ -196,6 +221,11 @@ def _collect(payload: object) -> tuple[list[tuple[str, str]], list[str], list[st
 
 
 def category_from_payload(payload: dict) -> str:
+    category, _ = taxonomy_from_payload(payload)
+    return category
+
+
+def taxonomy_from_payload(payload: dict) -> tuple[str, str]:
     slugs: list[str] = []
     webengage = payload.get("webengage")
     if isinstance(webengage, dict):
@@ -204,24 +234,52 @@ def category_from_payload(payload: dict) -> str:
     if isinstance(analytics, dict):
         slugs.append(str(analytics.get("cat2") or ""))
     for slug in slugs:
-        kind = slug.strip().lower()
-        if kind.startswith("residential"):
-            return "residential"
-        if kind.startswith("commercial"):
-            return "commercial"
-    return ""
+        kind = slug.strip().lower().replace("_", "-")
+        if "-" not in kind:
+            continue
+        left, right = kind.split("-", 1)
+        if left not in {"residential", "commercial"}:
+            continue
+        if right not in {"sell", "rent"}:
+            continue
+        return left, right
+    return "", ""
+
+
+def _money_value(raw: str | None) -> int | None:
+    if not raw or not raw.strip():
+        return None
+    if any(word in raw for word in ("توافق", "رایگان")):
+        return None
+    number = parse_number(raw)
+    if number is None:
+        return None
+    return int(number)
 
 
 def parse_divar_post(payload: dict) -> DivarPost:
     pairs, texts, images, titles = _collect(payload)
     area_raw = _best_value(pairs, _score_area)
     price_raw = _best_value(pairs, _score_price)
+    deposit_raw = _best_value(pairs, _score_deposit)
+    rent_raw = _best_value(pairs, _score_rent)
     bedrooms_raw = _best_value(pairs, _score_bedrooms)
     year_raw = _best_value(pairs, _score_year)
+    category, deal_type = taxonomy_from_payload(payload)
 
     area = parse_number(area_raw) if area_raw else None
-    price_number = parse_number(price_raw) if price_raw else None
-    if price_raw and any(word in price_raw for word in ("توافق", "رایگان")):
+    price_number = _money_value(price_raw)
+    deposit_number = _money_value(deposit_raw)
+    if rent_raw and any(word in rent_raw for word in ("بدون", "صفر")):
+        rent_number = 0
+    else:
+        rent_number = _money_value(rent_raw)
+        if rent_number is None and rent_raw and parse_number(rent_raw) == 0:
+            rent_number = 0
+    if deal_type == "sell":
+        deposit_number = None
+        rent_number = None
+    elif deal_type == "rent":
         price_number = None
     bedrooms_number = parse_number(bedrooms_raw) if bedrooms_raw else None
 
@@ -240,12 +298,15 @@ def parse_divar_post(payload: dict) -> DivarPost:
         title=title[:300],
         description=description,
         area=area,
-        price=int(price_number) if price_number is not None else None,
+        price=price_number,
         bedrooms=int(bedrooms_number) if bedrooms_number is not None else None,
         building_year=parse_build_year(year_raw),
         image_urls=unique_images[:10],
         specs=specs,
-        category=category_from_payload(payload),
+        category=category,
+        deal_type=deal_type,
+        deposit=deposit_number,
+        rent=rent_number,
     )
 
 

@@ -15,6 +15,20 @@ CATEGORY_LABELS = {
     "residential": "مسکونی",
     "commercial": "اداری و تجاری",
 }
+DEAL_LABELS = {
+    "sell": "فروش",
+    "rent": "اجاره",
+}
+
+
+def _searchable(listing: Listing) -> bool:
+    if listing.category not in CATEGORY_LABELS or listing.deal_type not in DEAL_LABELS:
+        return False
+    if listing.area is None or listing.bedrooms is None:
+        return False
+    if listing.deal_type == "sell":
+        return listing.price is not None
+    return listing.deposit is not None and listing.rent is not None
 
 
 def _out(listing: Listing, warnings: list[str] | None = None) -> ListingOut:
@@ -27,15 +41,13 @@ def _out(listing: Listing, warnings: list[str] | None = None) -> ListingOut:
         price=listing.price,
         bedrooms=listing.bedrooms,
         category=CATEGORY_LABELS.get(listing.category, ""),
+        deal_type=DEAL_LABELS.get(listing.deal_type, ""),
+        deposit=listing.deposit,
+        rent=listing.rent,
         structured_text=listing.structured_text,
         unique_code=listing.unique_code,
         llm_used=listing.llm_used,
-        searchable=(
-            listing.area is not None
-            and listing.price is not None
-            and listing.bedrooms is not None
-            and listing.category in CATEGORY_LABELS
-        ),
+        searchable=_searchable(listing),
         image_count=max(len(listing.image_file_ids or []), len(listing.image_urls or [])),
         archived=bool(listing.image_file_ids),
         created_at_jalali=format_jalali(listing.created_at),

@@ -54,7 +54,17 @@ def init_db() -> None:
             _ensure_column(connection, "buyer_sessions", "age_skipped", "BOOLEAN NOT NULL DEFAULT 0")
             _ensure_column(connection, "listings", "building_year", "INTEGER")
             _ensure_column(connection, "listings", "category", "VARCHAR(20) NOT NULL DEFAULT ''")
+            _ensure_column(connection, "listings", "deal_type", "VARCHAR(20) NOT NULL DEFAULT ''")
+            _ensure_column(connection, "listings", "deposit", "BIGINT")
+            _ensure_column(connection, "listings", "rent", "BIGINT")
             _ensure_column(connection, "buyer_sessions", "category", "VARCHAR(20) NOT NULL DEFAULT ''")
+            _ensure_column(connection, "buyer_sessions", "deal_type", "VARCHAR(20) NOT NULL DEFAULT ''")
+            _ensure_column(connection, "buyer_sessions", "deposit_min", "BIGINT")
+            _ensure_column(connection, "buyer_sessions", "deposit_max", "BIGINT")
+            _ensure_column(connection, "buyer_sessions", "deposit_skipped", "BOOLEAN NOT NULL DEFAULT 0")
+            _ensure_column(connection, "buyer_sessions", "rent_min", "BIGINT")
+            _ensure_column(connection, "buyer_sessions", "rent_max", "BIGINT")
+            _ensure_column(connection, "buyer_sessions", "rent_skipped", "BOOLEAN NOT NULL DEFAULT 0")
     _backfill_building_years()
 
 

@@ -14,6 +14,21 @@ def _expand_bounds(low, high, *, lower: bool, upper: bool):
     return low, high
 
 
+def _apply_money_bounds(query, column, bounds: tuple[int | None, int | None] | None):
+    if bounds is None:
+        return query
+    low, high = bounds
+    query = query.filter(column.is_not(None))
+    if low == 0 and high == 0:
+        return query.filter(column == 0)
+    low, high = _expand_bounds(low, high, lower=False, upper=True)
+    if low is not None:
+        query = query.filter(column >= low)
+    if high is not None:
+        query = query.filter(column <= high)
+    return query
+
+
 def match_listings(
     db: Session,
     area: tuple[float | None, float | None] | None = None,
@@ -23,10 +38,15 @@ def match_listings(
     age: tuple[int | None, int | None] | None = None,
     now_year: int | None = None,
     category: str | None = None,
+    deal_type: str | None = None,
+    deposit: tuple[int | None, int | None] | None = None,
+    rent: tuple[int | None, int | None] | None = None,
 ) -> list[Listing]:
     query = db.query(Listing)
     if category:
         query = query.filter(Listing.category == category)
+    if deal_type:
+        query = query.filter(Listing.deal_type == deal_type)
     if area is not None:
         area = _expand_bounds(*area, lower=True, upper=True)
         low, high = area
@@ -35,14 +55,9 @@ def match_listings(
             query = query.filter(Listing.area >= low)
         if high is not None:
             query = query.filter(Listing.area <= high)
-    if price is not None:
-        price = _expand_bounds(*price, lower=False, upper=True)
-        low, high = price
-        query = query.filter(Listing.price.is_not(None))
-        if low is not None:
-            query = query.filter(Listing.price >= low)
-        if high is not None:
-            query = query.filter(Listing.price <= high)
+    query = _apply_money_bounds(query, Listing.price, price)
+    query = _apply_money_bounds(query, Listing.deposit, deposit)
+    query = _apply_money_bounds(query, Listing.rent, rent)
     if bedrooms is not None:
         if bedrooms_or_more:
             query = query.filter(Listing.bedrooms >= bedrooms)
