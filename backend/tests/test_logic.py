@@ -344,6 +344,7 @@ class LogicTests(unittest.TestCase):
             deposit_max=None,
             rent_min=None,
             rent_max=None,
+            rent_convertible=False,
         ):
             db.add(
                 Listing(
@@ -363,6 +364,7 @@ class LogicTests(unittest.TestCase):
                     deposit_max=deposit if deposit_max is None else deposit_max,
                     rent_min=rent if rent_min is None else rent_min,
                     rent_max=rent if rent_max is None else rent_max,
+                    rent_convertible=rent_convertible,
                     raw_description="",
                     structured_text=f"کد: {code}",
                     unique_code=code,
@@ -397,6 +399,7 @@ class LogicTests(unittest.TestCase):
             deposit_max=7_000_000_000,
             rent_min=0,
             rent_max=180_000_000,
+            rent_convertible=True,
         )
         db.commit()
 
@@ -528,6 +531,29 @@ class LogicTests(unittest.TestCase):
             )
         ]
         self.assertNotIn("14141414", too_low)
+        incompatible = [
+            item.unique_code
+            for item in match_listings(
+                db,
+                deal_type="rent",
+                category="residential",
+                deposit=(None, 1_000_000_000),
+                rent=(None, 20_000_000),
+            )
+        ]
+        self.assertNotIn("14141414", incompatible)
+        self.assertNotIn("12121212", incompatible)
+        convertible_ok = [
+            item.unique_code
+            for item in match_listings(
+                db,
+                deal_type="rent",
+                category="residential",
+                deposit=(None, 7_000_000_000),
+                rent=(0, 0),
+            )
+        ]
+        self.assertIn("14141414", convertible_ok)
         db.close()
 
     def test_jalali_report_bound(self):
