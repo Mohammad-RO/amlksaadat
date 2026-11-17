@@ -102,7 +102,7 @@ def format_toman(amount: int) -> str:
     return f"{grouped.translate(TO_PERSIAN_DIGITS)} تومان"
 
 
-def format_toman_range(low: int | None, high: int | None) -> str | None:
+def format_toman_range(low: int | None, high: int | None, *, high_first: bool = False) -> str | None:
     if low is None and high is None:
         return None
     if low is None:
@@ -112,7 +112,8 @@ def format_toman_range(low: int | None, high: int | None) -> str | None:
     assert low is not None and high is not None
     if low == high:
         return format_toman(low)
-    return f"از {format_toman(low)} تا {format_toman(high)}"
+    first, second = (high, low) if high_first else (low, high)
+    return f"از {format_toman(first)} تا {format_toman(second)}"
 
 
 def as_tehran(moment: datetime) -> datetime:

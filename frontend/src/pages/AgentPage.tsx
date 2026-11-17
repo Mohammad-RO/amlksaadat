@@ -10,11 +10,13 @@ function field(value: number | null, suffix: string) {
   return `${money.format(value)} ${suffix}`;
 }
 
-function moneyRange(low: number | null, high: number | null) {
+function moneyRange(low: number | null, high: number | null, highFirst = false) {
   if (low === null && high === null) return "نامشخص";
   if (low === null) return `${money.format(high as number)} تومان`;
   if (high === null || low === high) return `${money.format(low)} تومان`;
-  return `از ${money.format(low)} تا ${money.format(high)} تومان`;
+  const first = highFirst ? high : low;
+  const second = highFirst ? low : high;
+  return `از ${money.format(first)} تا ${money.format(second)} تومان`;
 }
 
 export function AgentPage() {
@@ -174,7 +176,7 @@ export function AgentPage() {
                               رهن: {moneyRange(item.deposit_min ?? item.deposit, item.deposit_max ?? item.deposit)}
                             </div>
                             <div className="rounded-2xl bg-sand px-3 py-2">
-                              اجاره: {moneyRange(item.rent_min ?? item.rent, item.rent_max ?? item.rent)}
+                              اجاره: {moneyRange(item.rent_min ?? item.rent, item.rent_max ?? item.rent, true)}
                             </div>
                             {item.rent_convertible && (
                               <div className="rounded-2xl bg-sand px-3 py-2">ودیعه و اجاره: قابل تبدیل</div>

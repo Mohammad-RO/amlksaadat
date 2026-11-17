@@ -254,7 +254,7 @@ def _is_rent_money_title(title: str) -> bool:
 
 def _rent_money_specs(post: DivarPost) -> list[tuple[str, str]]:
     deposit_text = format_toman_range(post.deposit_min, post.deposit_max)
-    rent_text = format_toman_range(post.rent_min, post.rent_max)
+    rent_text = format_toman_range(post.rent_min, post.rent_max, high_first=True)
     rows: list[tuple[str, str]] = []
     if deposit_text:
         rows.append(("ودیعه", deposit_text))

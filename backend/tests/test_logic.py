@@ -305,7 +305,7 @@ class LogicTests(unittest.TestCase):
         self.assertEqual(slider_post.rent_max, 180_000_000)
         composed = compose_listing_text(slider_post, "توضیح کوتاه")
         self.assertIn("از ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان تا ۷٬۰۰۰٬۰۰۰٬۰۰۰ تومان", composed)
-        self.assertIn("از ۰ تومان تا ۱۸۰٬۰۰۰٬۰۰۰ تومان", composed)
+        self.assertIn("از ۱۸۰٬۰۰۰٬۰۰۰ تومان تا ۰ تومان", composed)
         self.assertIn("ودیعه و اجاره: قابل تبدیل", composed)
         preview = listing_preview(composed)
         self.assertIn("ودیعه:", preview)
