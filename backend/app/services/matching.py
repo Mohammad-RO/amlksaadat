@@ -29,6 +29,21 @@ def _apply_money_bounds(query, column, bounds: tuple[int | None, int | None] | N
     return query
 
 
+def _apply_range_money_bounds(query, min_col, max_col, bounds: tuple[int | None, int | None] | None):
+    if bounds is None:
+        return query
+    low, high = bounds
+    query = query.filter(min_col.is_not(None), max_col.is_not(None))
+    if low == 0 and high == 0:
+        return query.filter(min_col == 0)
+    low, high = _expand_bounds(low, high, lower=False, upper=True)
+    if high is not None:
+        query = query.filter(min_col <= high)
+    if low is not None:
+        query = query.filter(max_col >= low)
+    return query
+
+
 def match_listings(
     db: Session,
     area: tuple[float | None, float | None] | None = None,
@@ -56,8 +71,8 @@ def match_listings(
         if high is not None:
             query = query.filter(Listing.area <= high)
     query = _apply_money_bounds(query, Listing.price, price)
-    query = _apply_money_bounds(query, Listing.deposit, deposit)
-    query = _apply_money_bounds(query, Listing.rent, rent)
+    query = _apply_range_money_bounds(query, Listing.deposit_min, Listing.deposit_max, deposit)
+    query = _apply_range_money_bounds(query, Listing.rent_min, Listing.rent_max, rent)
     if bedrooms is not None:
         if bedrooms_or_more:
             query = query.filter(Listing.bedrooms >= bedrooms)

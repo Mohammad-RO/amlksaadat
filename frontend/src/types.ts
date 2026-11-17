@@ -38,6 +38,11 @@ export type Listing = {
   deal_type: string;
   deposit: number | null;
   rent: number | null;
+  deposit_min: number | null;
+  deposit_max: number | null;
+  rent_min: number | null;
+  rent_max: number | null;
+  rent_convertible: boolean;
   structured_text: string;
   unique_code: string;
   llm_used: boolean;

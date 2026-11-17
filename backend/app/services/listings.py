@@ -28,7 +28,7 @@ def _searchable(listing: Listing) -> bool:
         return False
     if listing.deal_type == "sell":
         return listing.price is not None
-    return listing.deposit is not None and listing.rent is not None
+    return listing.deposit_min is not None and listing.rent_min is not None
 
 
 async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[Listing, list[str]]:
@@ -66,6 +66,11 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         deal_type=post.deal_type,
         deposit=post.deposit,
         rent=post.rent,
+        deposit_min=post.deposit_min,
+        deposit_max=post.deposit_max,
+        rent_min=post.rent_min,
+        rent_max=post.rent_max,
+        rent_convertible=bool(post.rent_convertible),
         raw_description=post.description,
         structured_text=structured,
         unique_code=code,

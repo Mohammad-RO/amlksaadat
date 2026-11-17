@@ -70,6 +70,11 @@ class ListingOut(BaseModel):
     deal_type: str
     deposit: int | None = None
     rent: int | None = None
+    deposit_min: int | None = None
+    deposit_max: int | None = None
+    rent_min: int | None = None
+    rent_max: int | None = None
+    rent_convertible: bool = False
     structured_text: str
     unique_code: str
     llm_used: bool

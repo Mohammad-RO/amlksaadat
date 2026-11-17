@@ -6,6 +6,7 @@ from openai import OpenAI
 
 from app.config import settings
 from app.services.divar import DivarPost
+from app.utils import format_toman_range
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +244,26 @@ def listing_details(text: str) -> str:
     return f"{preview}\n\n{extra}"
 
 
+def _is_rent_money_title(title: str) -> bool:
+    if "ودیعه" in title:
+        return True
+    if "اجاره" in title and "قیمت" not in title:
+        return True
+    return False
+
+
+def _rent_money_specs(post: DivarPost) -> list[tuple[str, str]]:
+    deposit_text = format_toman_range(post.deposit_min, post.deposit_max)
+    rent_text = format_toman_range(post.rent_min, post.rent_max)
+    rows: list[tuple[str, str]] = []
+    if deposit_text:
+        rows.append(("ودیعه", deposit_text))
+    if rent_text:
+        rows.append(("اجاره ماهانه", rent_text))
+    rows.append(("ودیعه و اجاره", "قابل تبدیل" if post.rent_convertible else "غیر قابل تبدیل"))
+    return rows
+
+
 def compose_listing_text(post: DivarPost, description: str) -> str:
     parts: list[str] = []
     if post.title:
@@ -252,6 +273,14 @@ def compose_listing_text(post: DivarPost, description: str) -> str:
         for title, value in post.specs
         if not _is_image_ownership_title(title)
     ]
+    if post.deal_type == "rent":
+        visible_specs = [(title, value) for title, value in visible_specs if not _is_rent_money_title(title)]
+        money_specs = _rent_money_specs(post)
+        insert_at = 0
+        for index, (title, _value) in enumerate(visible_specs):
+            if any(key in title for key in ("متراژ", "اتاق", "خواب", "ساخت")):
+                insert_at = index + 1
+        visible_specs = visible_specs[:insert_at] + money_specs + visible_specs[insert_at:]
     spec_lines = [f"{icon_for(title)} {title}: {value}" for title, value in visible_specs]
     if spec_lines:
         parts.append("\n".join(spec_lines))

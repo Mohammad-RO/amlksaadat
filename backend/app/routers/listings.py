@@ -28,7 +28,7 @@ def _searchable(listing: Listing) -> bool:
         return False
     if listing.deal_type == "sell":
         return listing.price is not None
-    return listing.deposit is not None and listing.rent is not None
+    return listing.deposit_min is not None and listing.rent_min is not None
 
 
 def _out(listing: Listing, warnings: list[str] | None = None) -> ListingOut:
@@ -44,6 +44,11 @@ def _out(listing: Listing, warnings: list[str] | None = None) -> ListingOut:
         deal_type=DEAL_LABELS.get(listing.deal_type, ""),
         deposit=listing.deposit,
         rent=listing.rent,
+        deposit_min=listing.deposit_min,
+        deposit_max=listing.deposit_max,
+        rent_min=listing.rent_min,
+        rent_max=listing.rent_max,
+        rent_convertible=bool(listing.rent_convertible),
         structured_text=listing.structured_text,
         unique_code=listing.unique_code,
         llm_used=listing.llm_used,

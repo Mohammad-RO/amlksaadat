@@ -35,6 +35,11 @@ class DivarPost:
     deal_type: str = ""
     deposit: int | None = None
     rent: int | None = None
+    deposit_min: int | None = None
+    deposit_max: int | None = None
+    rent_min: int | None = None
+    rent_max: int | None = None
+    rent_convertible: bool = False
 
 
 def _score_area(title: str) -> int:
@@ -257,6 +262,65 @@ def _money_value(raw: str | None) -> int | None:
     return int(number)
 
 
+def _money_sides(node: object) -> list[int]:
+    if not isinstance(node, dict):
+        return []
+    values: list[int] = []
+    for key in ("value", "transformed_value"):
+        raw = node.get(key)
+        if raw is None or raw == "":
+            continue
+        amount = _money_value(str(raw))
+        if amount is None and str(raw).strip() in {"0", "۰"}:
+            amount = 0
+        if amount is not None:
+            values.append(amount)
+    return values
+
+
+def _bounds_from_values(values: list[int], *, fill_zero: bool) -> tuple[int | None, int | None]:
+    amounts = list(values)
+    if fill_zero and len(amounts) == 1:
+        amounts.append(0)
+    if not amounts:
+        return None, None
+    return min(amounts), max(amounts)
+
+
+def _rent_slider_data(payload: dict) -> dict | None:
+    found: list[dict] = []
+
+    def visit(node: object) -> None:
+        if isinstance(node, dict):
+            widget = str(node.get("widget_type") or "")
+            type_name = str(node.get("@type") or "")
+            if widget == "RENT_SLIDER" or "RentSliderData" in type_name:
+                data = node.get("data") if isinstance(node.get("data"), dict) else node
+                if isinstance(data, dict) and ("credit" in data or "rent" in data):
+                    found.append(data)
+            for child in node.values():
+                visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(payload)
+    return found[0] if found else None
+
+
+def _webengage_money(payload: dict, key: str) -> int | None:
+    webengage = payload.get("webengage")
+    if not isinstance(webengage, dict):
+        return None
+    raw = webengage.get(key)
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return _money_value(str(raw))
+
+
 def parse_divar_post(payload: dict) -> DivarPost:
     pairs, texts, images, titles = _collect(payload)
     area_raw = _best_value(pairs, _score_area)
@@ -276,9 +340,36 @@ def parse_divar_post(payload: dict) -> DivarPost:
         rent_number = _money_value(rent_raw)
         if rent_number is None and rent_raw and parse_number(rent_raw) == 0:
             rent_number = 0
+
+    deposit_min = deposit_max = deposit_number
+    rent_min = rent_max = rent_number
+    rent_convertible = False
+    slider = _rent_slider_data(payload)
+    if deal_type == "rent" and slider is not None:
+        rent_convertible = True
+        credit_low, credit_high = _bounds_from_values(_money_sides(slider.get("credit")), fill_zero=False)
+        rent_low, rent_high = _bounds_from_values(_money_sides(slider.get("rent")), fill_zero=True)
+        if credit_low is not None:
+            deposit_min, deposit_max = credit_low, credit_high
+            deposit_number = credit_low
+        if rent_low is not None:
+            rent_min, rent_max = rent_low, rent_high
+            rent_number = rent_low
+
+    if deal_type == "rent":
+        if deposit_min is None:
+            credit = _webengage_money(payload, "credit")
+            if credit is not None:
+                deposit_number = deposit_min = deposit_max = credit
+        if rent_min is None:
+            rent_fallback = _webengage_money(payload, "rent")
+            if rent_fallback is not None:
+                rent_number = rent_min = rent_max = rent_fallback
+
     if deal_type == "sell":
-        deposit_number = None
-        rent_number = None
+        deposit_number = deposit_min = deposit_max = None
+        rent_number = rent_min = rent_max = None
+        rent_convertible = False
     elif deal_type == "rent":
         price_number = None
     bedrooms_number = parse_number(bedrooms_raw) if bedrooms_raw else None
@@ -307,6 +398,11 @@ def parse_divar_post(payload: dict) -> DivarPost:
         deal_type=deal_type,
         deposit=deposit_number,
         rent=rent_number,
+        deposit_min=deposit_min,
+        deposit_max=deposit_max,
+        rent_min=rent_min,
+        rent_max=rent_max,
+        rent_convertible=rent_convertible,
     )
 
 

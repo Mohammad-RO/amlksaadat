@@ -7,6 +7,7 @@ import jdatetime
 TEHRAN = ZoneInfo("Asia/Tehran")
 
 PERSIAN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+TO_PERSIAN_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
 MONTHS = {
     1: "فروردین",
     2: "اردیبهشت",
@@ -94,6 +95,24 @@ def parse_number(raw: str) -> float | None:
     if not match:
         return None
     return float(match.group(0))
+
+
+def format_toman(amount: int) -> str:
+    grouped = f"{int(amount):,}".replace(",", "٬")
+    return f"{grouped.translate(TO_PERSIAN_DIGITS)} تومان"
+
+
+def format_toman_range(low: int | None, high: int | None) -> str | None:
+    if low is None and high is None:
+        return None
+    if low is None:
+        low = high
+    if high is None:
+        high = low
+    assert low is not None and high is not None
+    if low == high:
+        return format_toman(low)
+    return f"از {format_toman(low)} تا {format_toman(high)}"
 
 
 def as_tehran(moment: datetime) -> datetime:

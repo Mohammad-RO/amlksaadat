@@ -8,12 +8,13 @@ from app.database import Base
 from app.models import Agent, Listing
 from app.bot.handlers import _caption, _preview_listing
 from app.services.divar import category_from_payload, parse_divar_post, taxonomy_from_payload
-from app.services.llm import compose_listing_text, images_belong_to_listing, listing_details
+from app.services.llm import compose_listing_text, images_belong_to_listing, listing_details, listing_preview
 from app.services.matching import match_listings
 from app.utils import (
     build_year_from_text,
     duplicate_message,
     extract_divar_token,
+    format_toman_range,
     normalize_phone,
     parse_build_year,
     parse_report_bound,
@@ -265,7 +266,52 @@ class LogicTests(unittest.TestCase):
         self.assertEqual(rent_post.category, "residential")
         self.assertEqual(rent_post.deposit, 2_000_000_000)
         self.assertEqual(rent_post.rent, 120_000_000)
+        self.assertEqual(rent_post.deposit_min, 2_000_000_000)
+        self.assertEqual(rent_post.deposit_max, 2_000_000_000)
+        self.assertFalse(rent_post.rent_convertible)
         self.assertIsNone(rent_post.price)
+        slider_payload = {
+            "webengage": {"cat_2": "residential-rent", "credit": 1_000_000_000, "rent": 180_000_000},
+            "sections": [
+                {
+                    "widgets": [
+                        {
+                            "widget_type": "RENT_SLIDER",
+                            "data": {
+                                "@type": "type.googleapis.com/widgets.RentSliderData",
+                                "credit": {"value": "1000000000", "transformed_value": "7000000000"},
+                                "rent": {"value": "180000000"},
+                                "label": "برای تبدیل بکشید",
+                            },
+                        },
+                        {
+                            "widget_type": "GROUP_INFO_ROW",
+                            "data": {
+                                "items": [
+                                    {"title": "متراژ", "value": "۱۳۵"},
+                                    {"title": "اتاق", "value": "۲"},
+                                ]
+                            },
+                        },
+                    ]
+                }
+            ],
+        }
+        slider_post = parse_divar_post(slider_payload)
+        self.assertTrue(slider_post.rent_convertible)
+        self.assertEqual(slider_post.deposit_min, 1_000_000_000)
+        self.assertEqual(slider_post.deposit_max, 7_000_000_000)
+        self.assertEqual(slider_post.rent_min, 0)
+        self.assertEqual(slider_post.rent_max, 180_000_000)
+        composed = compose_listing_text(slider_post, "توضیح کوتاه")
+        self.assertIn("از ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان تا ۷٬۰۰۰٬۰۰۰٬۰۰۰ تومان", composed)
+        self.assertIn("از ۰ تومان تا ۱۸۰٬۰۰۰٬۰۰۰ تومان", composed)
+        self.assertIn("ودیعه و اجاره: قابل تبدیل", composed)
+        preview = listing_preview(composed)
+        self.assertIn("ودیعه:", preview)
+        self.assertIn("اجاره ماهانه:", preview)
+        self.assertNotIn("قیمت کل", preview)
+        self.assertEqual(format_toman_range(1_000_000_000, 1_000_000_000), "۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان")
 
     def test_build_year_text(self):
         self.assertEqual(parse_build_year("نوساز", now_year=1405), 1405)
@@ -294,6 +340,10 @@ class LogicTests(unittest.TestCase):
             deal_type="sell",
             deposit=None,
             rent=None,
+            deposit_min=None,
+            deposit_max=None,
+            rent_min=None,
+            rent_max=None,
         ):
             db.add(
                 Listing(
@@ -309,6 +359,10 @@ class LogicTests(unittest.TestCase):
                     deal_type=deal_type,
                     deposit=deposit,
                     rent=rent,
+                    deposit_min=deposit if deposit_min is None else deposit_min,
+                    deposit_max=deposit if deposit_max is None else deposit_max,
+                    rent_min=rent if rent_min is None else rent_min,
+                    rent_max=rent if rent_max is None else rent_max,
                     raw_description="",
                     structured_text=f"کد: {code}",
                     unique_code=code,
@@ -328,6 +382,22 @@ class LogicTests(unittest.TestCase):
         add(50, 40_000_000_000, 2, "10101010", "token-office", 1402, "commercial")
         add(110, None, 2, "12121212", "token-rent", 1402, "residential", "rent", 2_000_000_000, 120_000_000)
         add(90, None, 2, "13131313", "token-rent-zero", 1402, "residential", "rent", 5_000_000_000, 0)
+        add(
+            135,
+            None,
+            2,
+            "14141414",
+            "token-rent-range",
+            1402,
+            "residential",
+            "rent",
+            1_000_000_000,
+            0,
+            deposit_min=1_000_000_000,
+            deposit_max=7_000_000_000,
+            rent_min=0,
+            rent_max=180_000_000,
+        )
         db.commit()
 
         inside = match_listings(
@@ -373,6 +443,10 @@ class LogicTests(unittest.TestCase):
             building_year=1402,
             category="residential",
             deal_type="sell",
+            deposit_min=None,
+            deposit_max=None,
+            rent_min=None,
+            rent_max=None,
             raw_description="",
             structured_text="کد: 88888888",
             unique_code="88888888",
@@ -391,6 +465,10 @@ class LogicTests(unittest.TestCase):
             building_year=1402,
             category="residential",
             deal_type="sell",
+            deposit_min=None,
+            deposit_max=None,
+            rent_min=None,
+            rent_max=None,
             raw_description="",
             structured_text="کد: 99999999",
             unique_code="99999999",
@@ -422,12 +500,34 @@ class LogicTests(unittest.TestCase):
                 rent=(None, 150_000_000),
             )
         ]
-        self.assertEqual(rented, ["12121212"])
+        self.assertCountEqual(rented, ["12121212", "14141414"])
         zero_rent = [
             item.unique_code
             for item in match_listings(db, deal_type="rent", category="residential", rent=(0, 0))
         ]
-        self.assertEqual(zero_rent, ["13131313"])
+        self.assertCountEqual(zero_rent, ["13131313", "14141414"])
+        ranged = [
+            item.unique_code
+            for item in match_listings(
+                db,
+                deal_type="rent",
+                category="residential",
+                deposit=(None, 3_000_000_000),
+                rent=(None, 200_000_000),
+            )
+        ]
+        self.assertIn("14141414", ranged)
+        self.assertIn("12121212", ranged)
+        too_low = [
+            item.unique_code
+            for item in match_listings(
+                db,
+                deal_type="rent",
+                category="residential",
+                deposit=(None, 500_000_000),
+            )
+        ]
+        self.assertNotIn("14141414", too_low)
         db.close()
 
     def test_jalali_report_bound(self):
