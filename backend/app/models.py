@@ -89,3 +89,38 @@ class BuyerSession(Base):
     rent_max: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     rent_skipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class DivarConnection(Base):
+    __tablename__ = "divar_connection"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    url: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    business_token: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    phone: Mapped[str] = mapped_column(String(11), default="", nullable=False)
+    cookies: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    front_token: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    pending_phone: Mapped[str] = mapped_column(String(11), default="", nullable=False)
+    pending_device_id: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    pending_pre_auth: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    pending_cookies: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    pending_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class DivarColleague(Base):
+    __tablename__ = "divar_colleagues"
+    __table_args__ = (UniqueConstraint("business_token", "relation_token", name="uq_divar_colleague"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    business_token: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    relation_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    phone: Mapped[str] = mapped_column(String(11), index=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )

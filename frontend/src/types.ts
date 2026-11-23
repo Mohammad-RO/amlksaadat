@@ -26,6 +26,26 @@ export type Report = {
   }>;
 };
 
+export type DivarColleague = {
+  id: number;
+  name: string;
+  phone: string;
+};
+
+export type DivarColleagues = {
+  url: string;
+  items: DivarColleague[];
+};
+
+export type DivarRefresh = {
+  needs_login: boolean;
+  added: number;
+  removed: number;
+  updated: number;
+  url: string;
+  items: DivarColleague[];
+};
+
 export type Listing = {
   id: number;
   title: string;

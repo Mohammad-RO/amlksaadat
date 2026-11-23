@@ -6,8 +6,28 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_admin
-from app.models import Agent, Listing
-from app.schemas import AgentCreate, AgentOut, AgentUpdate, ReportOut, ReportRow
+from app.models import Agent, DivarConnection, Listing
+from app.schemas import (
+    AgentCreate,
+    AgentOut,
+    AgentUpdate,
+    DivarCodeIn,
+    DivarColleagueOut,
+    DivarColleaguesOut,
+    DivarLinkIn,
+    DivarPhoneIn,
+    DivarRefreshOut,
+    ReportOut,
+    ReportRow,
+)
+from app.services.divar_panel import (
+    DivarLoginRequired,
+    colleague_rows,
+    confirm_divar_login,
+    refresh_colleagues,
+    save_agent_management_link,
+    start_divar_login,
+)
 from app.utils import normalize_phone, parse_report_bound
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -116,3 +136,49 @@ def reports(
             for agent, count in rows
         ],
     )
+
+
+def _divar_items(db: Session, business_token: str) -> list[DivarColleagueOut]:
+    return [DivarColleagueOut(id=row.id, name=row.name, phone=row.phone) for row in colleague_rows(db, business_token)]
+
+
+def _divar_state(db: Session) -> tuple[str, str, list[DivarColleagueOut]]:
+    row = db.get(DivarConnection, 1)
+    url = row.url if row else ""
+    token = row.business_token if row else ""
+    return url, token, _divar_items(db, token)
+
+
+@router.get("/divar/colleagues", response_model=DivarColleaguesOut)
+def list_divar_colleagues(db: Session = Depends(get_db)) -> DivarColleaguesOut:
+    url, _, items = _divar_state(db)
+    return DivarColleaguesOut(url=url, items=items)
+
+
+@router.post("/divar/link", response_model=DivarColleaguesOut)
+def save_divar_link(body: DivarLinkIn, db: Session = Depends(get_db)) -> DivarColleaguesOut:
+    row = save_agent_management_link(db, body.url)
+    return DivarColleaguesOut(url=row.url, items=_divar_items(db, row.business_token))
+
+
+@router.post("/divar/refresh", response_model=DivarRefreshOut)
+def refresh_divar_colleagues(db: Session = Depends(get_db)) -> DivarRefreshOut:
+    url, _, items = _divar_state(db)
+    try:
+        _, added, removed, updated = refresh_colleagues(db)
+    except DivarLoginRequired:
+        return DivarRefreshOut(needs_login=True, url=url, items=items)
+    _, token, items = _divar_state(db)
+    return DivarRefreshOut(added=added, removed=removed, updated=updated, url=url, items=items)
+
+
+@router.post("/divar/login/start")
+def start_divar_otp(body: DivarPhoneIn, db: Session = Depends(get_db)) -> dict:
+    start_divar_login(db, body.phone)
+    return {"ok": True}
+
+
+@router.post("/divar/login/confirm")
+def confirm_divar_otp(body: DivarCodeIn, db: Session = Depends(get_db)) -> dict:
+    confirm_divar_login(db, body.code)
+    return {"ok": True}

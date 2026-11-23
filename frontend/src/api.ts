@@ -1,4 +1,4 @@
-import type { Agent, Listing, Report, Role } from "./types";
+import type { Agent, DivarColleagues, DivarRefresh, Listing, Report, Role } from "./types";
 
 const TOKEN_KEY = "amlak_token";
 
@@ -77,6 +77,35 @@ export async function loadReport(dateFrom: string, dateTo: string) {
   if (dateTo) params.set("to", dateTo);
   const query = params.toString();
   return request<Report>(`/admin/reports${query ? `?${query}` : ""}`);
+}
+
+export async function divarColleagues() {
+  return request<DivarColleagues>("/admin/divar/colleagues");
+}
+
+export async function saveDivarLink(url: string) {
+  return request<DivarColleagues>("/admin/divar/link", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function refreshDivarColleagues() {
+  return request<DivarRefresh>("/admin/divar/refresh", { method: "POST" });
+}
+
+export async function startDivarLogin(phone: string) {
+  return request<{ ok: boolean }>("/admin/divar/login/start", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+}
+
+export async function confirmDivarLogin(code: string) {
+  return request<{ ok: boolean }>("/admin/divar/login/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
 }
 
 export async function systemHealth() {

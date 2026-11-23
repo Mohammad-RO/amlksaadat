@@ -2,12 +2,13 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, clearToken, createAgent, listAgents, loadReport, systemHealth, updateAgent } from "../api";
 import type { Agent, Report } from "../types";
+import { DivarColleaguesSection } from "./DivarColleaguesSection";
 
 const emptyEdit = { id: 0, name: "", phone: "" };
 
 export function AdminPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"agents" | "reports">("agents");
+  const [tab, setTab] = useState<"agents" | "divar" | "reports">("agents");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -102,9 +103,12 @@ export function AdminPage() {
         </p>
       )}
 
-      <div className="mt-6 grid grid-cols-2 rounded-full bg-paper p-1 text-sm sm:max-w-xs">
+      <div className="mt-6 grid grid-cols-3 rounded-full bg-paper p-1 text-sm sm:max-w-lg">
         <button className={`rounded-full px-3 py-2 ${tab === "agents" ? "bg-pine text-white" : ""}`} onClick={() => setTab("agents")}>
           مشاوران
+        </button>
+        <button className={`rounded-full px-3 py-2 ${tab === "divar" ? "bg-pine text-white" : ""}`} onClick={() => setTab("divar")}>
+          همکاران دیوار
         </button>
         <button className={`rounded-full px-3 py-2 ${tab === "reports" ? "bg-pine text-white" : ""}`} onClick={() => setTab("reports")}>
           گزارش
@@ -112,7 +116,9 @@ export function AdminPage() {
       </div>
       {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm leading-7 text-danger">{error}</p>}
 
-      {tab === "agents" ? (
+      {tab === "divar" ? (
+        <DivarColleaguesSection />
+      ) : tab === "agents" ? (
         <>
           <form onSubmit={onCreate} className="mt-6 grid gap-3 rounded-3xl border border-line bg-paper p-5 sm:grid-cols-[1fr_1fr_auto]">
             <input

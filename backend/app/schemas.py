@@ -85,6 +85,38 @@ class ListingOut(BaseModel):
     warnings: list[str] = []
 
 
+class DivarLinkIn(BaseModel):
+    url: str = Field(min_length=8, max_length=500)
+
+
+class DivarColleagueOut(BaseModel):
+    id: int
+    name: str
+    phone: str
+
+
+class DivarColleaguesOut(BaseModel):
+    url: str
+    items: list[DivarColleagueOut]
+
+
+class DivarRefreshOut(BaseModel):
+    needs_login: bool = False
+    added: int = 0
+    removed: int = 0
+    updated: int = 0
+    url: str = ""
+    items: list[DivarColleagueOut] = []
+
+
+class DivarPhoneIn(BaseModel):
+    phone: str
+
+
+class DivarCodeIn(BaseModel):
+    code: str = Field(min_length=4, max_length=12)
+
+
 class HealthOut(BaseModel):
     ok: bool
     bot_configured: bool
