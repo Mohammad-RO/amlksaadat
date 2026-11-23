@@ -22,6 +22,9 @@ export function DivarColleaguesSection() {
   const [loginStep, setLoginStep] = useState<"phone" | "code">("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const locked = Boolean(savedUrl) && !editing;
 
   useEffect(() => {
     divarColleagues()
@@ -43,6 +46,7 @@ export function DivarColleaguesSection() {
       setSavedUrl(state.url);
       setUrl(state.url);
       setItems(state.items);
+      setEditing(false);
       setNote("لینک ثبت شد.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "ثبت لینک انجام نشد.");
@@ -114,66 +118,88 @@ export function DivarColleaguesSection() {
     <section className="mt-6">
       <form onSubmit={onSave} className="grid gap-3 rounded-3xl border border-line bg-paper p-5 sm:grid-cols-[1fr_auto]">
         <input
-          className="rounded-2xl border border-line px-4 py-3 outline-none focus:border-pine"
+          className="rounded-2xl border border-line px-4 py-3 outline-none focus:border-pine disabled:bg-sand disabled:text-ink/70"
           dir="ltr"
           placeholder={PLACEHOLDER}
           value={url}
           onChange={(event) => setUrl(event.target.value)}
+          readOnly={locked}
           required
         />
-        <button disabled={busy} className="rounded-2xl bg-pine px-5 py-3 text-white disabled:opacity-60">
-          ثبت
-        </button>
-      </form>
-      <p className="mt-3 text-sm leading-7 text-ink/60">
-        لینک صفحهٔ مدیریت همکاران دیوار را ثبت کنید. نمونه: {PLACEHOLDER}
-      </p>
-
-      {savedUrl && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-line bg-paper px-5 py-4">
-          <p className="min-w-0 break-all text-sm" dir="ltr">
-            {savedUrl}
-          </p>
+        {locked ? (
           <button
             type="button"
-            disabled={busy}
-            className="rounded-2xl bg-pine px-5 py-3 text-sm text-white disabled:opacity-60"
-            onClick={onRefresh}
+            className="rounded-2xl border border-line px-5 py-3"
+            onClick={() => {
+              setEditing(true);
+              setNote("");
+            }}
           >
-            بروزرسانی
+            ویرایش
           </button>
-        </div>
+        ) : (
+          <button disabled={busy} className="rounded-2xl bg-pine px-5 py-3 text-white disabled:opacity-60">
+            ثبت
+          </button>
+        )}
+      </form>
+      {!locked && (
+        <p className="mt-3 text-sm leading-7 text-ink/60">
+          لینک صفحهٔ مدیریت همکاران دیوار را ثبت کنید. نمونه: {PLACEHOLDER}
+        </p>
+      )}
+
+      {savedUrl && (
+        <button
+          type="button"
+          disabled={busy}
+          className="mt-4 rounded-2xl bg-pine px-5 py-3 text-sm text-white disabled:opacity-60"
+          onClick={onRefresh}
+        >
+          بروزرسانی
+        </button>
       )}
 
       {note && <p className="mt-4 rounded-2xl bg-sand px-4 py-3 text-sm leading-7">{note}</p>}
       {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm leading-7 text-danger">{error}</p>}
 
       <div className="mt-5 overflow-hidden rounded-3xl border border-line bg-paper">
-        <table className="w-full text-sm">
-          <thead className="bg-sand text-ink/70">
-            <tr>
-              <th className="px-4 py-3 text-right font-medium">نام</th>
-              <th className="px-4 py-3 text-right font-medium">شماره</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="border-t border-line">
-                <td className="px-4 py-3">{item.name}</td>
-                <td className="px-4 py-3" dir="ltr">
-                  {item.phone}
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-5 py-4 text-right font-medium"
+          aria-expanded={listOpen}
+          onClick={() => setListOpen((open) => !open)}
+        >
+          <span>لیست مشاوران</span>
+          <span className="text-sm text-ink/50">{listOpen ? "بستن" : "باز کردن"}</span>
+        </button>
+        {listOpen && (
+          <table className="w-full border-t border-line text-sm">
+            <thead className="bg-sand text-ink/70">
               <tr>
-                <td className="px-4 py-8 text-ink/50" colSpan={2}>
-                  هنوز همکاری از دیوار در این لیست نیست.
-                </td>
+                <th className="px-4 py-3 text-right font-medium">نام</th>
+                <th className="px-4 py-3 text-right font-medium">شماره</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-line">
+                  <td className="px-4 py-3">{item.name}</td>
+                  <td className="px-4 py-3" dir="ltr">
+                    {item.phone}
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td className="px-4 py-8 text-ink/50" colSpan={2}>
+                    هنوز همکاری از دیوار در این لیست نیست.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {loginOpen && (
