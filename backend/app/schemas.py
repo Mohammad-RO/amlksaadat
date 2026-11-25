@@ -40,20 +40,6 @@ class AgentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ReportRow(BaseModel):
-    agent_id: int
-    name: str
-    phone: str
-    is_active: bool
-    listings_count: int
-
-
-class ReportOut(BaseModel):
-    date_from: str | None
-    date_to: str | None
-    items: list[ReportRow]
-
-
 class ListingCreate(BaseModel):
     divar_url: str = Field(min_length=8, max_length=500)
 

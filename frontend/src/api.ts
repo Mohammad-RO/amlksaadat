@@ -1,4 +1,4 @@
-import type { Agent, DivarColleagues, DivarRefresh, DivarSync, Listing, Report, Role } from "./types";
+import type { Agent, DivarColleagues, DivarRefresh, DivarSync, Listing, Role } from "./types";
 
 const TOKEN_KEY = "amlak_token";
 
@@ -69,14 +69,6 @@ export async function updateAgent(id: number, payload: Partial<Pick<Agent, "name
     method: "PATCH",
     body: JSON.stringify(payload),
   });
-}
-
-export async function loadReport(dateFrom: string, dateTo: string) {
-  const params = new URLSearchParams();
-  if (dateFrom) params.set("from", dateFrom);
-  if (dateTo) params.set("to", dateTo);
-  const query = params.toString();
-  return request<Report>(`/admin/reports${query ? `?${query}` : ""}`);
 }
 
 export async function divarColleagues() {

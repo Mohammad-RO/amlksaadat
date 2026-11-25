@@ -14,18 +14,6 @@ export type Agent = {
   created_at: string;
 };
 
-export type Report = {
-  date_from: string | null;
-  date_to: string | null;
-  items: Array<{
-    agent_id: number;
-    name: string;
-    phone: string;
-    is_active: boolean;
-    listings_count: number;
-  }>;
-};
-
 export type DivarColleague = {
   id: number;
   name: string;

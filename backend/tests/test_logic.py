@@ -17,7 +17,6 @@ from app.utils import (
     format_toman_range,
     normalize_phone,
     parse_build_year,
-    parse_report_bound,
 )
 
 
@@ -555,13 +554,6 @@ class LogicTests(unittest.TestCase):
         ]
         self.assertIn("14141414", convertible_ok)
         db.close()
-
-    def test_jalali_report_bound(self):
-        start = parse_report_bound("1404/01/01", end_of_day=False)
-        end = parse_report_bound("1404/01/01", end_of_day=True)
-        self.assertLess(start, end)
-        self.assertEqual((end - start).total_seconds(), 24 * 60 * 60)
-
 
 if __name__ == "__main__":
     unittest.main()

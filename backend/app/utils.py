@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import jdatetime
@@ -141,25 +141,6 @@ def duplicate_message(agent_name: str, created_at: datetime) -> str:
 def format_jalali(moment: datetime) -> str:
     date_text, time_text = jalali_stamp(moment)
     return f"{date_text}، {time_text}"
-
-
-def parse_report_bound(raw: str, end_of_day: bool) -> datetime:
-    text = to_english_digits(raw.strip()).replace("/", "-")
-    parts = [int(part) for part in text.split("-")]
-    if len(parts) != 3:
-        raise ValueError("تاریخ معتبر نیست.")
-    year, month, day = parts
-    if year < 1700:
-        gregorian = jdatetime.date(year, month, day).togregorian()
-        local_date = datetime(gregorian.year, gregorian.month, gregorian.day)
-    else:
-        local_date = datetime(year, month, day)
-    clock = time(23, 59, 59) if end_of_day else time(0, 0, 0)
-    local = datetime.combine(local_date.date(), clock, tzinfo=TEHRAN)
-    if end_of_day:
-        local = local + timedelta(seconds=1)
-        return local.astimezone(timezone.utc)
-    return local.astimezone(timezone.utc)
 
 
 def format_price(value: int | None) -> str:

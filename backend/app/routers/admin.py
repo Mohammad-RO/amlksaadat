@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -18,8 +18,6 @@ from app.schemas import (
     DivarPhoneIn,
     DivarRefreshOut,
     DivarSyncOut,
-    ReportOut,
-    ReportRow,
 )
 from app.services.divar_import import start_sync, sync_status
 from app.services.divar_panel import (
@@ -31,7 +29,7 @@ from app.services.divar_panel import (
     save_posts_link,
     start_divar_login,
 )
-from app.utils import normalize_phone, parse_report_bound
+from app.utils import normalize_phone
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -97,48 +95,6 @@ def update_agent(agent_id: int, body: AgentUpdate, db: Session = Depends(get_db)
     db.refresh(agent)
     count = db.query(func.count(Listing.id)).filter(Listing.agent_id == agent.id).scalar() or 0
     return _agent_out(agent, int(count))
-
-
-@router.get("/reports", response_model=ReportOut)
-def reports(
-    date_from: str | None = Query(default=None, alias="from"),
-    date_to: str | None = Query(default=None, alias="to"),
-    db: Session = Depends(get_db),
-) -> ReportOut:
-    join_on = Listing.agent_id == Agent.id
-    try:
-        start = parse_report_bound(date_from, end_of_day=False) if date_from else None
-        end = parse_report_bound(date_to, end_of_day=True) if date_to else None
-    except (ValueError, OverflowError) as exc:
-        raise HTTPException(status_code=400, detail="بازه تاریخ معتبر نیست. نمونه: 1404/08/01") from exc
-    if start and end and start >= end:
-        raise HTTPException(status_code=400, detail="تاریخ شروع باید قبل از تاریخ پایان باشد.")
-    if start:
-        join_on = and_(join_on, Listing.created_at >= start)
-    if end:
-        join_on = and_(join_on, Listing.created_at < end)
-
-    rows = (
-        db.query(Agent, func.count(Listing.id))
-        .outerjoin(Listing, join_on)
-        .group_by(Agent.id, Agent.name, Agent.phone, Agent.is_active, Agent.created_at, Agent.updated_at)
-        .order_by(func.count(Listing.id).desc(), Agent.name)
-        .all()
-    )
-    return ReportOut(
-        date_from=date_from,
-        date_to=date_to,
-        items=[
-            ReportRow(
-                agent_id=agent.id,
-                name=agent.name,
-                phone=agent.phone,
-                is_active=agent.is_active,
-                listings_count=count,
-            )
-            for agent, count in rows
-        ],
-    )
 
 
 def _divar_items(db: Session, business_token: str) -> list[DivarColleagueOut]:

@@ -1,21 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, clearToken, createAgent, listAgents, loadReport, systemHealth, updateAgent } from "../api";
-import type { Agent, Report } from "../types";
+import { ApiError, clearToken, createAgent, listAgents, systemHealth, updateAgent } from "../api";
+import type { Agent } from "../types";
 import { DivarColleaguesSection } from "./DivarColleaguesSection";
 
 const emptyEdit = { id: 0, name: "", phone: "" };
 
 export function AdminPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"agents" | "divar" | "reports">("agents");
+  const [tab, setTab] = useState<"agents" | "divar">("agents");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [edit, setEdit] = useState(emptyEdit);
-  const [report, setReport] = useState<Report | null>(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [archiveReady, setArchiveReady] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,22 +66,12 @@ export function AdminPage() {
     }
   }
 
-  async function onReport(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    try {
-      setReport(await loadReport(dateFrom.trim(), dateTo.trim()));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "گزارش خوانده نشد.");
-    }
-  }
-
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-8">
       <header className="flex items-center justify-between gap-4">
         <div>
           <p className="text-sm text-moss">محیط ادمین</p>
-          <h1 className="text-2xl font-semibold">مشاوران و گزارش فایل‌ها</h1>
+          <h1 className="text-2xl font-semibold">مشاوران و همکاران دیوار</h1>
         </div>
         <button
           className="rounded-full border border-line bg-paper px-4 py-2 text-sm"
@@ -103,22 +90,19 @@ export function AdminPage() {
         </p>
       )}
 
-      <div className="mt-6 grid grid-cols-3 rounded-full bg-paper p-1 text-sm sm:max-w-lg">
+      <div className="mt-6 grid grid-cols-2 rounded-full bg-paper p-1 text-sm sm:max-w-xs">
         <button className={`rounded-full px-3 py-2 ${tab === "agents" ? "bg-pine text-white" : ""}`} onClick={() => setTab("agents")}>
           مشاوران
         </button>
         <button className={`rounded-full px-3 py-2 ${tab === "divar" ? "bg-pine text-white" : ""}`} onClick={() => setTab("divar")}>
           همکاران دیوار
         </button>
-        <button className={`rounded-full px-3 py-2 ${tab === "reports" ? "bg-pine text-white" : ""}`} onClick={() => setTab("reports")}>
-          گزارش
-        </button>
       </div>
       {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm leading-7 text-danger">{error}</p>}
 
       {tab === "divar" ? (
         <DivarColleaguesSection />
-      ) : tab === "agents" ? (
+      ) : (
         <>
           <form onSubmit={onCreate} className="mt-6 grid gap-3 rounded-3xl border border-line bg-paper p-5 sm:grid-cols-[1fr_1fr_auto]">
             <input
@@ -190,47 +174,6 @@ export function AdminPage() {
             </form>
           )}
         </>
-      ) : (
-        <section className="mt-6">
-          <form onSubmit={onReport} className="grid gap-3 rounded-3xl border border-line bg-paper p-5 sm:grid-cols-[1fr_1fr_auto]">
-            <input
-              className="rounded-2xl border border-line px-4 py-3"
-              placeholder="از تاریخ، مثلاً 1404/08/01"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-            />
-            <input
-              className="rounded-2xl border border-line px-4 py-3"
-              placeholder="تا تاریخ، مثلاً 1404/08/30"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-            />
-            <button className="rounded-2xl bg-pine px-5 py-3 text-white">نمایش</button>
-          </form>
-          <p className="mt-3 text-sm text-ink/60">اگر تاریخ خالی بماند، همه آگهی‌های ثبت‌شده شمرده می‌شود. تاریخ شمسی هم پذیرفته می‌شود.</p>
-          {report && (
-            <div className="mt-4 overflow-hidden rounded-3xl border border-line bg-paper">
-              <table className="w-full text-sm">
-                <thead className="bg-sand text-ink/70">
-                  <tr>
-                    <th className="px-4 py-3 text-right font-medium">مشاور</th>
-                    <th className="px-4 py-3 text-right font-medium">شماره</th>
-                    <th className="px-4 py-3 text-right font-medium">تعداد فایل</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.items.map((item) => (
-                    <tr key={item.agent_id} className="border-t border-line">
-                      <td className="px-4 py-3">{item.name}</td>
-                      <td className="px-4 py-3" dir="ltr">{item.phone}</td>
-                      <td className="px-4 py-3">{item.listings_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
       )}
     </main>
   );
