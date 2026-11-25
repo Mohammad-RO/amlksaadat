@@ -27,6 +27,7 @@ class SyncStatus:
     completed: int = 0
     sent: int = 0
     skipped: int = 0
+    removed: int = 0
     errors: list[str] = field(default_factory=list)
     message: str = ""
     phase: str = "idle"
@@ -83,9 +84,25 @@ async def _run() -> None:
         _status.total = len(posts)
         _status.phase = "sending"
         people = await asyncio.to_thread(_colleague_pairs)
+        kept: set[str] = set()
+        catalog_complete = True
         for post in posts:
             try:
-                outcome = await _import_post(post, people, cookies, front_token)
+                url, token = await _resolve_post(post, cookies, front_token)
+            except DivarLoginRequired:
+                raise
+            except AppError as exc:
+                catalog_complete = False
+                _remember_error(post.title, exc.message)
+                continue
+            except Exception:
+                logger.exception("divar post resolve failed")
+                catalog_complete = False
+                _remember_error(post.title, "شناسهٔ این آگهی از دیوار خوانده نشد.")
+                continue
+            kept.add(token)
+            try:
+                outcome = await _import_resolved(post, people, url, token)
             except DivarLoginRequired:
                 raise
             except AppError as exc:
@@ -100,6 +117,10 @@ async def _run() -> None:
             else:
                 _status.skipped += 1
             _status.completed = _status.sent + _status.skipped
+        if catalog_complete:
+            _status.removed = await asyncio.to_thread(retain_active_listings, kept)
+        else:
+            _remember_error("حذف آگهی‌ها", "چون خواندن بعضی آگهی‌ها ناتمام ماند، آگهی قبلی از بات حذف نشد.")
         _status.phase = "done"
         _status.message = "بررسی لیست مشاوران"
         _status.running = False
@@ -149,11 +170,15 @@ def _colleague_pairs() -> list[tuple[str, str]]:
         db.close()
 
 
-async def _import_post(post, people: list[tuple[str, str]], cookies: list, front_token: str) -> str:
+async def _resolve_post(post, cookies: list, front_token: str) -> tuple[str, str]:
     url = await asyncio.to_thread(fetch_public_url, cookies, post.manage_token, front_token)
     token = extract_divar_token(url)
     if not token:
         raise AppError("توکن آگهی از لینک دیوار خوانده نشد.")
+    return url, token
+
+
+async def _import_resolved(post, people: list[tuple[str, str]], url: str, token: str) -> str:
     db = SessionLocal()
     try:
         existing = db.query(Listing.id).filter(Listing.divar_token == token).first()
@@ -166,6 +191,28 @@ async def _import_post(post, people: list[tuple[str, str]], cookies: list, front
     except AppError as exc:
         if exc.status_code == 409:
             return "skipped"
+        raise
+    finally:
+        db.close()
+
+
+def drop_listings_outside(db, tokens: set[str]) -> int:
+    removed = 0
+    for row in db.query(Listing).all():
+        if row.divar_token not in tokens:
+            db.delete(row)
+            removed += 1
+    return removed
+
+
+def retain_active_listings(tokens: set[str]) -> int:
+    db = SessionLocal()
+    try:
+        removed = drop_listings_outside(db, tokens)
+        db.commit()
+        return removed
+    except Exception:
+        db.rollback()
         raise
     finally:
         db.close()

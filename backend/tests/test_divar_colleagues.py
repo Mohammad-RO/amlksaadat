@@ -5,7 +5,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.errors import AppError
-from app.models import DivarColleague
+from app.models import Agent, DivarColleague, Listing
+from app.services.divar_import import drop_listings_outside
 from app.services.divar_panel import (
     ColleagueSnapshot,
     _agent_refs,
@@ -161,3 +162,28 @@ class DivarColleagueSyncTest(unittest.TestCase):
             match_colleague("فرهاد", people)
         with self.assertRaises(AppError):
             match_colleague("ماهان", [("ماهان", "09024313120"), ("ماهان", "09120000000")])
+
+    def test_drop_listings_outside_active_set(self):
+        agent = Agent(name="ورود دیوار", phone="09000000000", is_active=False)
+        self.db.add(agent)
+        self.db.flush()
+        for token, code in (("keep", "11111111"), ("gone", "22222222")):
+            self.db.add(
+                Listing(
+                    agent_id=agent.id,
+                    divar_url=f"https://divar.ir/v/{token}",
+                    divar_token=token,
+                    title="خانه",
+                    unique_code=code,
+                )
+            )
+        self.db.commit()
+        removed = drop_listings_outside(self.db, {"keep"})
+        self.db.commit()
+        self.assertEqual(removed, 1)
+        left = {row.divar_token for row in self.db.query(Listing).all()}
+        self.assertEqual(left, {"keep"})
+        removed_all = drop_listings_outside(self.db, set())
+        self.db.commit()
+        self.assertEqual(removed_all, 1)
+        self.assertEqual(self.db.query(Listing).count(), 0)

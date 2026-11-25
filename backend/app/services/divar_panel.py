@@ -359,6 +359,7 @@ def fetch_active_posts(cookies: list, front_token: str = "") -> list[ActivePost]
     posts: list[ActivePost] = []
     cursor = ""
     seen: set[str] = set()
+    finished = False
     for _ in range(40):
         specification: dict[str, str] = {"tab_identifier": "ongoing"}
         if cursor:
@@ -378,10 +379,15 @@ def fetch_active_posts(cookies: list, front_token: str = "") -> list[ActivePost]
             raise AppError("خواندن آگهی‌های فعال از دیوار انجام نشد.", status_code=502)
         page_posts, next_cursor, has_next = active_posts_from_page(_json_object(response))
         posts.extend(page_posts)
-        if not has_next or not next_cursor or next_cursor in seen:
+        if not has_next:
+            finished = True
+            break
+        if not next_cursor or next_cursor in seen:
             break
         seen.add(next_cursor)
         cursor = next_cursor
+    if not finished:
+        raise AppError("خواندن همهٔ آگهی‌های فعال ناتمام ماند.", status_code=502)
     return posts
 
 

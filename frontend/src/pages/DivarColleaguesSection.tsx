@@ -312,6 +312,9 @@ export function DivarColleaguesSection() {
                 {sync.completed} از {sync.total}
               </p>
             )}
+            {sync.phase === "done" && !sync.message.includes("لینک آگهی") && (
+              <p className="mt-2 text-sm leading-7">{sync.removed} آگهی که دیگر در لیست فعال دیوار نبود از بات حذف شد.</p>
+            )}
             {sync.phase === "done" && sync.message.includes("لینک آگهی") && (
               <p className="mt-2 text-sm leading-7 text-copper">{sync.message}</p>
             )}

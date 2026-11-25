@@ -119,6 +119,7 @@ def _sync_out() -> DivarSyncOut:
         completed=status.completed,
         sent=status.sent,
         skipped=status.skipped,
+        removed=status.removed,
         errors=list(status.errors),
         message=status.message,
         phase=status.phase,

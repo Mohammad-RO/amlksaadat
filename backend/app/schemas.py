@@ -95,6 +95,7 @@ class DivarSyncOut(BaseModel):
     completed: int = 0
     sent: int = 0
     skipped: int = 0
+    removed: int = 0
     errors: list[str] = []
     message: str = ""
     phase: str = "idle"

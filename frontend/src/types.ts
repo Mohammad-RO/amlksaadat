@@ -34,6 +34,7 @@ export type DivarSync = {
   completed: number;
   sent: number;
   skipped: number;
+  removed: number;
   errors: string[];
   message: string;
   phase: string;
