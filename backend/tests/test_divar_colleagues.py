@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.errors import AppError
 from app.models import Agent, DivarColleague, Listing
-from app.services.divar_import import drop_listings_outside
+from app.services.divar_import import apply_consultant_change, drop_listings_outside
 from app.services.divar_panel import (
     ColleagueSnapshot,
     _agent_refs,
@@ -187,3 +187,27 @@ class DivarColleagueSyncTest(unittest.TestCase):
         self.db.commit()
         self.assertEqual(removed_all, 1)
         self.assertEqual(self.db.query(Listing).count(), 0)
+
+    def test_consultant_change_updates_name_and_phone(self):
+        agent = Agent(name="ورود دیوار", phone="09000000000", is_active=False)
+        self.db.add(agent)
+        self.db.flush()
+        listing = Listing(
+            agent_id=agent.id,
+            divar_url="https://divar.ir/v/keep",
+            divar_token="keep",
+            title="خانه",
+            unique_code="33333333",
+            consultant_name="شهاب اكبرى",
+            consultant_phone="09121276459",
+        )
+        people = [("شهاب اکبری", "09121276459"), ("فرهاد", "09122361418")]
+        self.assertFalse(apply_consultant_change(listing, "شهاب اکبری", people))
+        self.assertEqual(listing.consultant_phone, "09121276459")
+        self.assertTrue(apply_consultant_change(listing, "فرهاد", people))
+        self.assertEqual(listing.consultant_name, "فرهاد")
+        self.assertEqual(listing.consultant_phone, "09122361418")
+        with self.assertRaises(AppError):
+            apply_consultant_change(listing, "رضا", people)
+        self.assertEqual(listing.consultant_name, "فرهاد")
+        self.assertEqual(listing.consultant_phone, "09122361418")

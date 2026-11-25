@@ -10,6 +10,7 @@ from app.services.divar_panel import (
     fetch_active_posts,
     fetch_public_url,
     match_colleague,
+    name_key,
     refresh_colleagues,
 )
 from app.services.listings import import_agent, register_listing
@@ -181,8 +182,10 @@ async def _resolve_post(post, cookies: list, front_token: str) -> tuple[str, str
 async def _import_resolved(post, people: list[tuple[str, str]], url: str, token: str) -> str:
     db = SessionLocal()
     try:
-        existing = db.query(Listing.id).filter(Listing.divar_token == token).first()
+        existing = db.query(Listing).filter(Listing.divar_token == token).one_or_none()
         if existing:
+            if apply_consultant_change(existing, post.author, people):
+                db.commit()
             return "skipped"
         name, phone = match_colleague(post.author, people)
         agent = import_agent(db)
@@ -194,6 +197,15 @@ async def _import_resolved(post, people: list[tuple[str, str]], url: str, token:
         raise
     finally:
         db.close()
+
+
+def apply_consultant_change(listing: Listing, author: str, people: list[tuple[str, str]]) -> bool:
+    if name_key(listing.consultant_name) == name_key(author):
+        return False
+    name, phone = match_colleague(author, people)
+    listing.consultant_name = name
+    listing.consultant_phone = phone
+    return True
 
 
 def drop_listings_outside(db, tokens: set[str]) -> int:
