@@ -13,7 +13,7 @@ from app.services.divar_panel import (
     name_key,
     refresh_colleagues,
 )
-from app.services.listings import import_agent, register_listing
+from app.services.listings import import_agent, refresh_listing_content, register_listing
 from app.utils import extract_divar_token
 
 logger = logging.getLogger(__name__)
@@ -186,6 +186,8 @@ async def _import_resolved(post, people: list[tuple[str, str]], url: str, token:
         if existing:
             if apply_consultant_change(existing, post.author, people):
                 db.commit()
+            if await refresh_listing_content(db, existing):
+                return "sent"
             return "skipped"
         name, phone = match_colleague(post.author, people)
         agent = import_agent(db)

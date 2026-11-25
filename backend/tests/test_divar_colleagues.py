@@ -6,7 +6,10 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.errors import AppError
 from app.models import Agent, DivarColleague, Listing
+from app.services.divar import DivarPost
 from app.services.divar_import import apply_consultant_change, drop_listings_outside
+from app.services.listings import listing_content_changed
+from app.services.llm import compose_listing_text
 from app.services.divar_panel import (
     ColleagueSnapshot,
     _agent_refs,
@@ -211,3 +214,38 @@ class DivarColleagueSyncTest(unittest.TestCase):
             apply_consultant_change(listing, "رضا", people)
         self.assertEqual(listing.consultant_name, "فرهاد")
         self.assertEqual(listing.consultant_phone, "09122361418")
+
+    def test_description_alone_does_not_count_as_change(self):
+        post = DivarPost(
+            title="خانه",
+            description="توضیح تازه",
+            area=80,
+            price=1_000,
+            bedrooms=2,
+            building_year=1400,
+            image_urls=["https://img/a.jpg"],
+            specs=[("متراژ", "۸۰"), ("تعداد اتاق", "۲")],
+            category="residential",
+            deal_type="sell",
+        )
+        listing = Listing(
+            agent_id=1,
+            divar_url="https://divar.ir/v/abcde",
+            divar_token="abcde",
+            title="خانه",
+            area=80,
+            price=1_000,
+            bedrooms=2,
+            building_year=1400,
+            category="residential",
+            deal_type="sell",
+            unique_code="33333333",
+            image_urls=["https://img/a.jpg"],
+            structured_text=compose_listing_text(post, "توضیح قدیمی") + "\n\nکد: 33333333",
+        )
+        self.assertFalse(listing_content_changed(listing, post))
+        post.price = 2_000
+        self.assertTrue(listing_content_changed(listing, post))
+        post.price = 1_000
+        post.image_urls = ["https://img/b.jpg"]
+        self.assertTrue(listing_content_changed(listing, post))

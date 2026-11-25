@@ -65,6 +65,28 @@ async def _send_one(chat_id: str, content: bytes) -> str | None:
     return None
 
 
+async def archive_text(text: str) -> None:
+    chat_id = settings.telegram_archive_chat_id.strip()
+    body = (text or "").strip()
+    if not chat_id or _bot is None or not body:
+        return
+    if len(body) > 4000:
+        body = body[:4000].rstrip() + "…"
+    for pause in _SEND_PAUSES:
+        if pause:
+            await asyncio.sleep(pause)
+        try:
+            await _bot.send_message(chat_id=chat_id, text=body)
+            return
+        except RetryAfter as exc:
+            await asyncio.sleep(float(exc.retry_after) + 1)
+        except (NetworkError, TimedOut):
+            logger.warning("listing text upload stalled; retrying")
+        except Exception:
+            logger.exception("listing text was rejected")
+            return
+
+
 async def archive_images(urls: list[str]) -> list[str]:
     chat_id = settings.telegram_archive_chat_id.strip()
     if not chat_id or _bot is None or not urls:
