@@ -1,4 +1,4 @@
-import type { Agent, DivarColleagues, DivarRefresh, Listing, Report, Role } from "./types";
+import type { Agent, DivarColleagues, DivarRefresh, DivarSync, Listing, Report, Role } from "./types";
 
 const TOKEN_KEY = "amlak_token";
 
@@ -90,8 +90,23 @@ export async function saveDivarLink(url: string) {
   });
 }
 
+export async function saveDivarPostsLink(url: string) {
+  return request<DivarColleagues>("/admin/divar/posts-link", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
 export async function refreshDivarColleagues() {
   return request<DivarRefresh>("/admin/divar/refresh", { method: "POST" });
+}
+
+export async function startDivarSync() {
+  return request<DivarSync>("/admin/divar/sync", { method: "POST" });
+}
+
+export async function divarSyncStatus() {
+  return request<DivarSync>("/admin/divar/sync");
 }
 
 export async function startDivarLogin(phone: string) {

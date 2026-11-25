@@ -235,8 +235,10 @@ async def _send_details(chat_id: int, code: str, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(chat_id, "آگهی با این کد پیدا نشد.")
             return
         agent = listing.agent
+        consultant_name = listing.consultant_name or agent.name
+        consultant_phone = listing.consultant_phone or agent.phone
         text = _clip(listing_details(listing.structured_text))
-        text = f"{text}\n\nمشاور: {agent.name}\nشماره تماس: {agent.phone}"
+        text = f"{text}\n\nمشاور: {consultant_name}\nشماره تماس: {consultant_phone}"
         await context.bot.send_message(chat_id, text)
         file_ids = list(listing.image_file_ids or [])
         urls = list(listing.image_urls or [])

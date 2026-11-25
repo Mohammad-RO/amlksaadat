@@ -17,6 +17,11 @@ LINK_RE = re.compile(
     r"^https?://(?:www\.)?divar\.ir/my-divar/my-business/([A-Za-z0-9_-]+)/agent-management/?(?:\?.*)?$",
     re.IGNORECASE,
 )
+POSTS_RE = re.compile(
+    r"^https?://(?:www\.)?divar\.ir/my-divar/my-posts/?(?:\?.*)?$",
+    re.IGNORECASE,
+)
+PUBLIC_POST_RE = re.compile(r"https://divar\.ir/v/([A-Za-z0-9_-]{5,})")
 CHALLENGE_TTL = timedelta(minutes=10)
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -53,6 +58,25 @@ def parse_agent_management_url(raw: str) -> tuple[str, str]:
     token = match.group(1)
     url = f"https://divar.ir/my-divar/my-business/{token}/agent-management"
     return url, token
+
+
+def parse_posts_url(raw: str) -> str:
+    text = (raw or "").strip()
+    if text.startswith("divar.ir/"):
+        text = "https://" + text
+    if POSTS_RE.match(text) is None:
+        raise AppError("لینک باید صفحهٔ آگهی‌های من در دیوار باشد.")
+    return "https://divar.ir/my-divar/my-posts"
+
+
+def save_posts_link(db, raw_url: str) -> DivarConnection:
+    url = parse_posts_url(raw_url)
+    row = _connection(db)
+    row.posts_url = url
+    row.updated_at = _now()
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def save_agent_management_link(db, raw_url: str) -> DivarConnection:
@@ -236,6 +260,146 @@ def _fetch_people(client: httpx.Client, business_token: str) -> list[ColleagueSn
             )
         )
     return people
+
+
+@dataclass
+class ActivePost:
+    manage_token: str
+    title: str
+    author: str
+
+
+def author_from_label(text: str) -> str:
+    compact = (text or "").replace("\u200c", "").replace("\u200d", "").strip()
+    match = re.match(r"^توسط\s*:\s*(.+)$", compact)
+    return match.group(1).strip() if match else ""
+
+
+def name_key(value: str) -> str:
+    text = (value or "").replace("\u200c", "").replace("\u200d", "").replace("\u0640", "")
+    text = (
+        text.replace("ي", "ی")
+        .replace("ى", "ی")
+        .replace("ك", "ک")
+        .replace("ة", "ه")
+        .replace("أ", "ا")
+        .replace("إ", "ا")
+        .replace("آ", "ا")
+    )
+    return re.sub(r"\s+", "", text)
+
+
+def match_colleague(author: str, people: list[tuple[str, str]]) -> tuple[str, str]:
+    key = name_key(author)
+    if not key:
+        raise AppError("نام مشاور روی این آگهی نیست.")
+    found = [(name, phone) for name, phone in people if name_key(name) == key]
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        raise AppError(f"مشاور «{author}» در لیست همکاران نیست.")
+    raise AppError(f"چند همکار با نام «{author}» ثبت شده است.")
+
+
+def active_posts_from_page(payload: dict) -> tuple[list[ActivePost], str, bool]:
+    widgets = ((payload.get("page") or {}).get("widget_list") or [])
+    tab = ((payload.get("tab_bar") or {}).get("current_tab_identifier") or "")
+    if tab and tab != "ongoing":
+        raise AppError("پاسخ دیوار تب آگهی‌های فعال نبود.", status_code=502)
+    posts: list[ActivePost] = []
+    for widget in widgets:
+        if widget.get("widget_type") != "CONTENT_CONTAINER":
+            continue
+        inner = ((widget.get("data") or {}).get("widgets") or [])
+        row = next((item for item in inner if item.get("widget_type") == "POST_ROW"), None)
+        if row is None:
+            continue
+        data = row.get("data") or {}
+        action = data.get("action") or {}
+        manage_token = str((action.get("payload") or {}).get("manage_token") or "").strip()
+        if not manage_token:
+            continue
+        posts.append(
+            ActivePost(
+                manage_token=manage_token,
+                title=str(data.get("title") or "").strip() or "آگهی دیوار",
+                author=author_from_label(str(data.get("top_description_text") or "")),
+            )
+        )
+    scroll = (payload.get("page") or {}).get("infinite_scroll_response") or {}
+    cursor = str(scroll.get("last_item_identifier") or "")
+    return posts, cursor, bool(scroll.get("has_next"))
+
+
+def public_post_url(payload: dict) -> str:
+    found: list[str] = []
+
+    def walk(node) -> None:
+        if isinstance(node, str):
+            match = PUBLIC_POST_RE.search(node)
+            if match:
+                found.append(f"https://divar.ir/v/{match.group(1)}")
+            return
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value)
+            return
+        if isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(payload)
+    if not found:
+        raise AppError("لینک عمومی آگهی در دیوار پیدا نشد.", status_code=502)
+    return found[0]
+
+
+def fetch_active_posts(cookies: list, front_token: str = "") -> list[ActivePost]:
+    client = _client(cookies, front_token)
+    posts: list[ActivePost] = []
+    cursor = ""
+    seen: set[str] = set()
+    for _ in range(40):
+        specification: dict[str, str] = {"tab_identifier": "ongoing"}
+        if cursor:
+            specification["last_item_identifier"] = cursor
+        try:
+            response = client.post(
+                f"{API_ROOT}/v8/my-posts/w/list-v2",
+                json={"specification": specification},
+                headers=BROWSER_HEADERS,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("divar active posts failed: %s", exc.__class__.__name__)
+            raise AppError("ارتباط با دیوار برای خواندن آگهی‌ها برقرار نشد.", status_code=502) from exc
+        if response.status_code in {401, 403}:
+            raise DivarLoginRequired
+        if response.status_code != 200:
+            raise AppError("خواندن آگهی‌های فعال از دیوار انجام نشد.", status_code=502)
+        page_posts, next_cursor, has_next = active_posts_from_page(_json_object(response))
+        posts.extend(page_posts)
+        if not has_next or not next_cursor or next_cursor in seen:
+            break
+        seen.add(next_cursor)
+        cursor = next_cursor
+    return posts
+
+
+def fetch_public_url(cookies: list, manage_token: str, front_token: str = "") -> str:
+    client = _client(cookies, front_token)
+    try:
+        response = client.get(
+            f"{API_ROOT}/v8/post-management/page/{manage_token}",
+            headers=BROWSER_HEADERS,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("divar manage page failed: %s", exc.__class__.__name__)
+        raise AppError("ارتباط با دیوار برای خواندن آگهی برقرار نشد.", status_code=502) from exc
+    if response.status_code in {401, 403}:
+        raise DivarLoginRequired
+    if response.status_code != 200:
+        raise AppError("خواندن صفحهٔ آگهی از دیوار انجام نشد.", status_code=502)
+    return public_post_url(_json_object(response))
 
 
 def _agent_refs(payload: dict) -> list[tuple[str, str]]:

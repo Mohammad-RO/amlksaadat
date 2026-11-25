@@ -53,6 +53,8 @@ class Listing(Base):
     unique_code: Mapped[str] = mapped_column(String(8), unique=True, index=True, nullable=False)
     image_file_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     image_urls: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    consultant_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    consultant_phone: Mapped[str] = mapped_column(String(11), default="", nullable=False)
     llm_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -96,6 +98,7 @@ class DivarConnection(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     url: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    posts_url: Mapped[str] = mapped_column(String(500), default="", nullable=False)
     business_token: Mapped[str] = mapped_column(String(32), default="", nullable=False)
     phone: Mapped[str] = mapped_column(String(11), default="", nullable=False)
     cookies: Mapped[list] = mapped_column(JSON, default=list, nullable=False)

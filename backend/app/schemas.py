@@ -97,7 +97,21 @@ class DivarColleagueOut(BaseModel):
 
 class DivarColleaguesOut(BaseModel):
     url: str
+    posts_url: str = ""
     items: list[DivarColleagueOut]
+
+
+class DivarSyncOut(BaseModel):
+    running: bool
+    needs_login: bool = False
+    colleagues_ready: bool = False
+    total: int = 0
+    completed: int = 0
+    sent: int = 0
+    skipped: int = 0
+    errors: list[str] = []
+    message: str = ""
+    phase: str = "idle"
 
 
 class DivarRefreshOut(BaseModel):

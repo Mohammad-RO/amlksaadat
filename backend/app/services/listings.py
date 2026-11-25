@@ -10,6 +10,20 @@ from app.services.llm import compose_listing_text, images_belong_to_listing, rew
 from app.utils import duplicate_message, extract_divar_token
 
 
+IMPORT_PHONE = "09000000000"
+IMPORT_NAME = "ورود دیوار"
+
+
+def import_agent(db: Session) -> Agent:
+    agent = db.query(Agent).filter(Agent.phone == IMPORT_PHONE).one_or_none()
+    if agent is None:
+        agent = Agent(name=IMPORT_NAME, phone=IMPORT_PHONE, is_active=False)
+        db.add(agent)
+        db.commit()
+        db.refresh(agent)
+    return agent
+
+
 def _unique_code(db: Session) -> str:
     for _ in range(40):
         code = f"{random.randint(0, 99_999_999):08d}"
@@ -31,7 +45,13 @@ def _searchable(listing: Listing) -> bool:
     return listing.deposit_min is not None and listing.rent_min is not None
 
 
-async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[Listing, list[str]]:
+async def register_listing(
+    db: Session,
+    agent: Agent,
+    divar_url: str,
+    consultant_name: str = "",
+    consultant_phone: str = "",
+) -> tuple[Listing, list[str]]:
     raw_url = divar_url.strip()
     if "divar.ir" not in raw_url.lower():
         raise AppError("لینک دیوار معتبر نیست.", 400)
@@ -76,6 +96,8 @@ async def register_listing(db: Session, agent: Agent, divar_url: str) -> tuple[L
         unique_code=code,
         image_file_ids=file_ids,
         image_urls=image_urls,
+        consultant_name=consultant_name,
+        consultant_phone=consultant_phone,
         llm_used=llm_used,
     )
     db.add(listing)

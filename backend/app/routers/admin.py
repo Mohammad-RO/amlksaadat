@@ -17,15 +17,18 @@ from app.schemas import (
     DivarLinkIn,
     DivarPhoneIn,
     DivarRefreshOut,
+    DivarSyncOut,
     ReportOut,
     ReportRow,
 )
+from app.services.divar_import import start_sync, sync_status
 from app.services.divar_panel import (
     DivarLoginRequired,
     colleague_rows,
     confirm_divar_login,
     refresh_colleagues,
     save_agent_management_link,
+    save_posts_link,
     start_divar_login,
 )
 from app.utils import normalize_phone, parse_report_bound
@@ -142,34 +145,68 @@ def _divar_items(db: Session, business_token: str) -> list[DivarColleagueOut]:
     return [DivarColleagueOut(id=row.id, name=row.name, phone=row.phone) for row in colleague_rows(db, business_token)]
 
 
-def _divar_state(db: Session) -> tuple[str, str, list[DivarColleagueOut]]:
+def _divar_state(db: Session) -> tuple[str, str, str, list[DivarColleagueOut]]:
     row = db.get(DivarConnection, 1)
     url = row.url if row else ""
+    posts_url = row.posts_url if row else ""
     token = row.business_token if row else ""
-    return url, token, _divar_items(db, token)
+    return url, posts_url, token, _divar_items(db, token)
+
+
+def _sync_out() -> DivarSyncOut:
+    status = sync_status()
+    return DivarSyncOut(
+        running=status.running,
+        needs_login=status.needs_login,
+        colleagues_ready=status.colleagues_ready,
+        total=status.total,
+        completed=status.completed,
+        sent=status.sent,
+        skipped=status.skipped,
+        errors=list(status.errors),
+        message=status.message,
+        phase=status.phase,
+    )
 
 
 @router.get("/divar/colleagues", response_model=DivarColleaguesOut)
 def list_divar_colleagues(db: Session = Depends(get_db)) -> DivarColleaguesOut:
-    url, _, items = _divar_state(db)
-    return DivarColleaguesOut(url=url, items=items)
+    url, posts_url, _, items = _divar_state(db)
+    return DivarColleaguesOut(url=url, posts_url=posts_url, items=items)
 
 
 @router.post("/divar/link", response_model=DivarColleaguesOut)
 def save_divar_link(body: DivarLinkIn, db: Session = Depends(get_db)) -> DivarColleaguesOut:
     row = save_agent_management_link(db, body.url)
-    return DivarColleaguesOut(url=row.url, items=_divar_items(db, row.business_token))
+    return DivarColleaguesOut(url=row.url, posts_url=row.posts_url, items=_divar_items(db, row.business_token))
+
+
+@router.post("/divar/posts-link", response_model=DivarColleaguesOut)
+def save_divar_posts_link(body: DivarLinkIn, db: Session = Depends(get_db)) -> DivarColleaguesOut:
+    row = save_posts_link(db, body.url)
+    return DivarColleaguesOut(url=row.url, posts_url=row.posts_url, items=_divar_items(db, row.business_token))
 
 
 @router.post("/divar/refresh", response_model=DivarRefreshOut)
 def refresh_divar_colleagues(db: Session = Depends(get_db)) -> DivarRefreshOut:
-    url, _, items = _divar_state(db)
+    url, _, _, items = _divar_state(db)
     try:
         _, added, removed, updated = refresh_colleagues(db)
     except DivarLoginRequired:
         return DivarRefreshOut(needs_login=True, url=url, items=items)
-    _, token, items = _divar_state(db)
+    _, _, _, items = _divar_state(db)
     return DivarRefreshOut(added=added, removed=removed, updated=updated, url=url, items=items)
+
+
+@router.post("/divar/sync", response_model=DivarSyncOut)
+async def begin_divar_sync() -> DivarSyncOut:
+    await start_sync()
+    return _sync_out()
+
+
+@router.get("/divar/sync", response_model=DivarSyncOut)
+def read_divar_sync() -> DivarSyncOut:
+    return _sync_out()
 
 
 @router.post("/divar/login/start")

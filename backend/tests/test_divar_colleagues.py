@@ -10,8 +10,13 @@ from app.services.divar_panel import (
     ColleagueSnapshot,
     _agent_refs,
     _person_from_details,
+    active_posts_from_page,
     apply_colleague_snapshot,
+    author_from_label,
+    match_colleague,
     parse_agent_management_url,
+    parse_posts_url,
+    public_post_url,
 )
 
 
@@ -108,3 +113,51 @@ class DivarColleagueSyncTest(unittest.TestCase):
         self.assertEqual(name, "ماهان حسن نژاد")
         self.assertEqual(phone, "۰۹۱۲۲۱۶۷۹۲۲")
         self.assertEqual(role, "همکار")
+
+    def test_posts_link_and_active_page(self):
+        self.assertEqual(parse_posts_url("https://divar.ir/my-divar/my-posts"), "https://divar.ir/my-divar/my-posts")
+        with self.assertRaises(AppError):
+            parse_posts_url("https://divar.ir/my-divar/my-posts/waEMTo_j-Sxikn")
+        posts, cursor, has_next = active_posts_from_page(
+            {
+                "tab_bar": {"current_tab_identifier": "ongoing"},
+                "page": {
+                    "widget_list": [
+                        {
+                            "widget_type": "CONTENT_CONTAINER",
+                            "data": {
+                                "widgets": [
+                                    {
+                                        "widget_type": "POST_ROW",
+                                        "data": {
+                                            "title": "آپارتمان",
+                                            "top_description_text": "توسط: شهاب اكبرى",
+                                            "action": {"payload": {"manage_token": "waEMTo_j-Sxikn"}},
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                    "infinite_scroll_response": {"has_next": False, "last_item_identifier": "end"},
+                },
+            }
+        )
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].author, "شهاب اكبرى")
+        self.assertEqual(author_from_label("توسط: شهاب اکبری"), "شهاب اکبری")
+        self.assertFalse(has_next)
+        self.assertEqual(cursor, "end")
+        self.assertEqual(
+            public_post_url({"widgets": [{"text": "مشاهده در https://divar.ir/v/waEMTo_j"}]}),
+            "https://divar.ir/v/waEMTo_j",
+        )
+
+    def test_colleague_name_match(self):
+        people = [("شهاب اكبرى", "09121276459"), ("ماهان", "09024313120"), ("ماهان حسن نژاد", "09122167922")]
+        self.assertEqual(match_colleague("شهاب اکبری", people), ("شهاب اكبرى", "09121276459"))
+        self.assertEqual(match_colleague("ماهان", people)[0], "ماهان")
+        with self.assertRaises(AppError):
+            match_colleague("فرهاد", people)
+        with self.assertRaises(AppError):
+            match_colleague("ماهان", [("ماهان", "09024313120"), ("ماهان", "09120000000")])

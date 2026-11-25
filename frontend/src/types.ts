@@ -34,7 +34,21 @@ export type DivarColleague = {
 
 export type DivarColleagues = {
   url: string;
+  posts_url: string;
   items: DivarColleague[];
+};
+
+export type DivarSync = {
+  running: boolean;
+  needs_login: boolean;
+  colleagues_ready: boolean;
+  total: number;
+  completed: number;
+  sent: number;
+  skipped: number;
+  errors: string[];
+  message: string;
+  phase: string;
 };
 
 export type DivarRefresh = {
