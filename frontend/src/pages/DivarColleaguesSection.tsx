@@ -14,6 +14,14 @@ import type { DivarColleague, DivarSync } from "../types";
 const PLACEHOLDER = "https://divar.ir/my-divar/my-business/wgiqQiGe/agent-management";
 const POSTS_PLACEHOLDER = "https://divar.ir/my-divar/my-posts";
 
+function LockedLink({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-[50px] items-center rounded-2xl border border-line bg-sand px-4 py-3 text-sm text-ink/70">
+      {label}
+    </div>
+  );
+}
+
 export function DivarColleaguesSection() {
   const [url, setUrl] = useState("");
   const [savedUrl, setSavedUrl] = useState("");
@@ -54,8 +62,8 @@ export function DivarColleaguesSection() {
     };
   }, []);
 
-  async function onSave(event: FormEvent) {
-    event.preventDefault();
+  async function onSave(event?: FormEvent) {
+    event?.preventDefault();
     setBusy(true);
     setError("");
     setNote("");
@@ -73,8 +81,8 @@ export function DivarColleaguesSection() {
     }
   }
 
-  async function onSavePosts(event: FormEvent) {
-    event.preventDefault();
+  async function onSavePosts(event?: FormEvent) {
+    event?.preventDefault();
     setBusy(true);
     setError("");
     setNote("");
@@ -183,32 +191,43 @@ export function DivarColleaguesSection() {
 
   return (
     <section className="mt-6">
-      <form onSubmit={onSave} className="grid gap-3 rounded-3xl border border-line bg-paper p-5 sm:grid-cols-[1fr_auto]">
-        <input
-          className="rounded-2xl border border-line px-4 py-3 outline-none focus:border-pine disabled:bg-sand disabled:text-ink/70"
-          dir="ltr"
-          placeholder={PLACEHOLDER}
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          readOnly={locked}
-          required
-        />
-        {locked ? (
-          <button
-            type="button"
-            className="rounded-2xl border border-line px-5 py-3"
-            onClick={() => {
-              setEditing(true);
-              setNote("");
-            }}
-          >
-            ویرایش
-          </button>
-        ) : (
-          <button disabled={busy} className="rounded-2xl bg-pine px-5 py-3 text-white disabled:opacity-60">
-            ثبت
-          </button>
-        )}
+      <form onSubmit={onSave} className="rounded-3xl border border-line bg-paper p-5">
+        <p className="mb-2 text-sm font-medium">مشاور</p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          {locked ? (
+            <LockedLink label="لینک لیست مشاوران" />
+          ) : (
+            <input
+              className="rounded-2xl border border-line px-4 py-3 outline-none focus:border-pine"
+              dir="ltr"
+              placeholder={PLACEHOLDER}
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              required
+            />
+          )}
+          {locked ? (
+            <button
+              type="button"
+              className="rounded-2xl border border-line px-5 py-3"
+              onClick={() => {
+                setEditing(true);
+                setNote("");
+              }}
+            >
+              ویرایش
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-2xl bg-pine px-5 py-3 text-white disabled:opacity-60"
+              onClick={() => void onSave()}
+            >
+              ثبت
+            </button>
+          )}
+        </div>
       </form>
       {!locked && (
         <p className="mt-3 text-sm leading-7 text-ink/60">
@@ -216,32 +235,43 @@ export function DivarColleaguesSection() {
         </p>
       )}
 
-      <form onSubmit={onSavePosts} className="mt-4 grid gap-3 rounded-3xl border border-line bg-paper p-5 sm:grid-cols-[1fr_auto]">
-        <input
-          className="rounded-2xl border border-line px-4 py-3 outline-none focus:border-pine disabled:bg-sand disabled:text-ink/70"
-          dir="ltr"
-          placeholder={POSTS_PLACEHOLDER}
-          value={postsUrl}
-          onChange={(event) => setPostsUrl(event.target.value)}
-          readOnly={postsLocked}
-          required
-        />
-        {postsLocked ? (
-          <button
-            type="button"
-            className="rounded-2xl border border-line px-5 py-3"
-            onClick={() => {
-              setPostsEditing(true);
-              setNote("");
-            }}
-          >
-            ویرایش
-          </button>
-        ) : (
-          <button disabled={busy} className="rounded-2xl bg-pine px-5 py-3 text-white disabled:opacity-60">
-            ثبت
-          </button>
-        )}
+      <form onSubmit={onSavePosts} className="mt-4 rounded-3xl border border-line bg-paper p-5">
+        <p className="mb-2 text-sm font-medium">آگهی</p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          {postsLocked ? (
+            <LockedLink label="لینک آگهی‌های فعال" />
+          ) : (
+            <input
+              className="rounded-2xl border border-line px-4 py-3 outline-none focus:border-pine"
+              dir="ltr"
+              placeholder={POSTS_PLACEHOLDER}
+              value={postsUrl}
+              onChange={(event) => setPostsUrl(event.target.value)}
+              required
+            />
+          )}
+          {postsLocked ? (
+            <button
+              type="button"
+              className="rounded-2xl border border-line px-5 py-3"
+              onClick={() => {
+                setPostsEditing(true);
+                setNote("");
+              }}
+            >
+              ویرایش
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-2xl bg-pine px-5 py-3 text-white disabled:opacity-60"
+              onClick={() => void onSavePosts()}
+            >
+              ثبت
+            </button>
+          )}
+        </div>
       </form>
       {!postsLocked && (
         <p className="mt-3 text-sm leading-7 text-ink/60">لینک آگهی‌های من در دیوار را ثبت کنید. فقط آگهی‌های فعال فرستاده می‌شوند.</p>
