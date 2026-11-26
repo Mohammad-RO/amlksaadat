@@ -24,6 +24,8 @@ export type DivarColleagues = {
   url: string;
   posts_url: string;
   items: DivarColleague[];
+  last_sync_at: string;
+  last_sync_note: string;
 };
 
 export type DivarSync = {

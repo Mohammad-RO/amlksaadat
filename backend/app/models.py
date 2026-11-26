@@ -108,6 +108,11 @@ class DivarConnection(Base):
     pending_pre_auth: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     pending_cookies: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     pending_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_complete: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_sync_done: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_sync_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_sync_listed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

@@ -85,6 +85,8 @@ class DivarColleaguesOut(BaseModel):
     url: str
     posts_url: str = ""
     items: list[DivarColleagueOut]
+    last_sync_at: str = ""
+    last_sync_note: str = ""
 
 
 class DivarSyncOut(BaseModel):

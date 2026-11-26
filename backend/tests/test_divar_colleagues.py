@@ -8,7 +8,7 @@ from app.database import Base
 from app.errors import AppError
 from app.models import Agent, DivarColleague, Listing
 from app.services.divar import DivarPost
-from app.services.divar_import import apply_consultant_change, drop_listings_outside
+from app.services.divar_import import apply_consultant_change, drop_listings_outside, sync_result_note
 from app.services.listings import listing_content_changed
 from app.services.llm import compose_listing_text
 from app.services.divar_panel import (
@@ -258,6 +258,13 @@ class DivarSyncPauseTest(unittest.TestCase):
 
         divar_import._gate.set()
         divar_import._status = divar_import.SyncStatus()
+        divar_import.save_sync_mark = self._saved_mark
+
+    def setUp(self):
+        from app.services import divar_import
+
+        self._saved_mark = divar_import.save_sync_mark
+        divar_import.save_sync_mark = lambda *args, **kwargs: None
 
     def test_pause_holds_until_resume(self):
         from app.services import divar_import
@@ -297,3 +304,13 @@ class DivarSyncPauseTest(unittest.TestCase):
             self.assertEqual(resumed.phase, "idle")
 
         asyncio.run(main())
+
+
+class SyncResultNoteTest(unittest.TestCase):
+    def test_complete_and_partial_notes(self):
+        self.assertEqual(sync_result_note(True, 190, 190, True), "کامل")
+        self.assertEqual(
+            sync_result_note(False, 25, 190, True),
+            "ناقص: بررسی لیست املاک و 25 آگهی از 190",
+        )
+        self.assertEqual(sync_result_note(False, 0, 0, False), "ناقص: بررسی لیست مشاوران")

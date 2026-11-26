@@ -19,7 +19,7 @@ from app.schemas import (
     DivarRefreshOut,
     DivarSyncOut,
 )
-from app.services.divar_import import cancel_sync, pause_sync, resume_sync, start_sync, sync_status
+from app.services.divar_import import cancel_sync, pause_sync, resume_sync, start_sync, sync_result_note, sync_status
 from app.services.divar_panel import (
     DivarLoginRequired,
     colleague_rows,
@@ -29,7 +29,7 @@ from app.services.divar_panel import (
     save_posts_link,
     start_divar_login,
 )
-from app.utils import normalize_phone
+from app.utils import format_jalali, normalize_phone
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -109,6 +109,22 @@ def _divar_state(db: Session) -> tuple[str, str, str, list[DivarColleagueOut]]:
     return url, posts_url, token, _divar_items(db, token)
 
 
+def _colleagues_out(db: Session, url: str, posts_url: str, business_token: str) -> DivarColleaguesOut:
+    row = db.get(DivarConnection, 1)
+    stamp = ""
+    note = ""
+    if row is not None and row.last_sync_at is not None:
+        stamp = format_jalali(row.last_sync_at)
+        note = sync_result_note(row.last_sync_complete, row.last_sync_done, row.last_sync_total, row.last_sync_listed)
+    return DivarColleaguesOut(
+        url=url,
+        posts_url=posts_url,
+        items=_divar_items(db, business_token),
+        last_sync_at=stamp,
+        last_sync_note=note,
+    )
+
+
 def _sync_out() -> DivarSyncOut:
     status = sync_status()
     return DivarSyncOut(
@@ -132,20 +148,20 @@ def _sync_out() -> DivarSyncOut:
 
 @router.get("/divar/colleagues", response_model=DivarColleaguesOut)
 def list_divar_colleagues(db: Session = Depends(get_db)) -> DivarColleaguesOut:
-    url, posts_url, _, items = _divar_state(db)
-    return DivarColleaguesOut(url=url, posts_url=posts_url, items=items)
+    url, posts_url, token, _ = _divar_state(db)
+    return _colleagues_out(db, url, posts_url, token)
 
 
 @router.post("/divar/link", response_model=DivarColleaguesOut)
 def save_divar_link(body: DivarLinkIn, db: Session = Depends(get_db)) -> DivarColleaguesOut:
     row = save_agent_management_link(db, body.url)
-    return DivarColleaguesOut(url=row.url, posts_url=row.posts_url, items=_divar_items(db, row.business_token))
+    return _colleagues_out(db, row.url, row.posts_url, row.business_token)
 
 
 @router.post("/divar/posts-link", response_model=DivarColleaguesOut)
 def save_divar_posts_link(body: DivarLinkIn, db: Session = Depends(get_db)) -> DivarColleaguesOut:
     row = save_posts_link(db, body.url)
-    return DivarColleaguesOut(url=row.url, posts_url=row.posts_url, items=_divar_items(db, row.business_token))
+    return _colleagues_out(db, row.url, row.posts_url, row.business_token)
 
 
 @router.post("/divar/refresh", response_model=DivarRefreshOut)

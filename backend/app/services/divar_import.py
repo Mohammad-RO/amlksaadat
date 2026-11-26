@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from app.database import SessionLocal
 from app.errors import AppError
@@ -36,6 +37,7 @@ class SyncStatus:
     current_title: str = ""
     current_author: str = ""
     paused: bool = False
+    list_ready: bool = False
 
 
 _status = SyncStatus()
@@ -95,8 +97,37 @@ def resume_sync() -> SyncStatus:
     return _status
 
 
+def sync_result_note(complete: bool, done: int, total: int, listed: bool) -> str:
+    if complete:
+        return "کامل"
+    if listed:
+        return f"ناقص: بررسی لیست املاک و {done} آگهی از {total}"
+    return "ناقص: بررسی لیست مشاوران"
+
+
+def save_sync_mark(complete: bool, done: int, total: int, listed: bool) -> None:
+    db = SessionLocal()
+    try:
+        row = db.get(DivarConnection, 1)
+        if row is None:
+            return
+        row.last_sync_at = datetime.now(timezone.utc)
+        row.last_sync_complete = complete
+        row.last_sync_done = done
+        row.last_sync_total = total
+        row.last_sync_listed = listed
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("sync result was not stored")
+    finally:
+        db.close()
+
+
 def cancel_sync() -> SyncStatus:
     global _generation
+    if _status.running:
+        save_sync_mark(False, _status.completed, _status.total, _status.list_ready)
     _generation += 1
     _status.running = False
     _status.paused = False
@@ -139,6 +170,7 @@ async def _run(generation: int) -> None:
         await _wait_if_paused(generation)
         cookies, front_token, posts_ready = await asyncio.to_thread(_session_flags)
         if not posts_ready:
+            await asyncio.to_thread(save_sync_mark, False, 0, 0, False)
             _status.phase = "done"
             _status.message = "بررسی لیست مشاوران. لینک آگهی‌ها ثبت نشده است."
             _status.running = False
@@ -148,6 +180,7 @@ async def _run(generation: int) -> None:
         posts = await asyncio.to_thread(fetch_active_posts, cookies, front_token)
         if generation != _generation:
             return
+        _status.list_ready = True
         _status.total = len(posts)
         _status.phase = "sending"
         _status.message = ""
@@ -195,6 +228,7 @@ async def _run(generation: int) -> None:
             _status.completed = _status.sent + _status.skipped
         if generation != _generation:
             return
+        await asyncio.to_thread(save_sync_mark, catalog_complete, _status.completed, _status.total, True)
         if catalog_complete:
             _status.removed = await asyncio.to_thread(retain_active_listings, kept)
         else:
@@ -219,6 +253,7 @@ async def _run(generation: int) -> None:
     except DivarLoginRequired:
         if generation != _generation:
             return
+        await asyncio.to_thread(save_sync_mark, False, _status.completed, _status.total, _status.list_ready)
         _status.needs_login = True
         _status.phase = "failed"
         _status.paused = False
@@ -227,6 +262,7 @@ async def _run(generation: int) -> None:
     except AppError as exc:
         if generation != _generation:
             return
+        await asyncio.to_thread(save_sync_mark, False, _status.completed, _status.total, _status.list_ready)
         _status.phase = "failed"
         _status.paused = False
         _status.running = False
@@ -234,6 +270,7 @@ async def _run(generation: int) -> None:
     except Exception:
         if generation != _generation:
             return
+        await asyncio.to_thread(save_sync_mark, False, _status.completed, _status.total, _status.list_ready)
         logger.exception("divar sync failed")
         _status.phase = "failed"
         _status.paused = False

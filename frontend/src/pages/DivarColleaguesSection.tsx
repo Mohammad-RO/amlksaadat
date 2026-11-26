@@ -12,7 +12,7 @@ import {
   startDivarLogin,
   startDivarSync,
 } from "../api";
-import type { DivarColleague, DivarSync } from "../types";
+import type { DivarColleague, DivarColleagues, DivarSync } from "../types";
 
 const PLACEHOLDER = "https://divar.ir/my-divar/my-business/wgiqQiGe/agent-management";
 const POSTS_PLACEHOLDER = "https://divar.ir/my-divar/my-posts";
@@ -43,6 +43,8 @@ export function DivarColleaguesSection() {
   const [listOpen, setListOpen] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
   const [sync, setSync] = useState<DivarSync | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState("");
+  const [lastSyncNote, setLastSyncNote] = useState("");
   const pollRef = useRef<number | null>(null);
   const progressOpenRef = useRef(false);
   const locked = Boolean(savedUrl) && !editing;
@@ -56,6 +58,8 @@ export function DivarColleaguesSection() {
         setSavedPostsUrl(state.posts_url);
         setPostsUrl(state.posts_url);
         setItems(state.items);
+        setLastSyncAt(state.last_sync_at || "");
+        setLastSyncNote(state.last_sync_note || "");
       })
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "لیست همکاران خوانده نشد."));
   }, []);
@@ -103,12 +107,14 @@ export function DivarColleaguesSection() {
     }
   }
 
-  function applyState(state: { url: string; posts_url: string; items: DivarColleague[] }) {
+  function applyState(state: DivarColleagues) {
     setSavedUrl(state.url);
     setUrl(state.url);
     setSavedPostsUrl(state.posts_url);
     setPostsUrl(state.posts_url);
     setItems(state.items);
+    setLastSyncAt(state.last_sync_at || "");
+    setLastSyncNote(state.last_sync_note || "");
   }
 
   function openProgress() {
@@ -127,6 +133,7 @@ export function DivarColleaguesSection() {
       const status = await cancelDivarSync();
       if (!progressOpenRef.current) {
         setSync({ ...status, running: false, paused: false });
+        applyState(await divarColleagues());
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "بستن بروزرسانی انجام نشد.");
@@ -324,14 +331,21 @@ export function DivarColleaguesSection() {
       )}
 
       {(savedUrl || savedPostsUrl) && (
-        <button
-          type="button"
-          disabled={busy || (progressOpen && Boolean(sync?.running))}
-          className="mt-4 rounded-2xl bg-pine px-5 py-3 text-sm text-white disabled:opacity-60"
-          onClick={onRefresh}
-        >
-          بروزرسانی
-        </button>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={busy || (progressOpen && Boolean(sync?.running))}
+            className="rounded-2xl bg-pine px-5 py-3 text-sm text-white disabled:opacity-60"
+            onClick={onRefresh}
+          >
+            بروزرسانی
+          </button>
+          {lastSyncAt && (
+            <p className="text-sm leading-7 text-ink/70">
+              {lastSyncAt} ({lastSyncNote})
+            </p>
+          )}
+        </div>
       )}
 
       {note && <p className="mt-4 rounded-2xl bg-sand px-4 py-3 text-sm leading-7">{note}</p>}
