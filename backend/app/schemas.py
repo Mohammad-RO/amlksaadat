@@ -99,6 +99,10 @@ class DivarSyncOut(BaseModel):
     errors: list[str] = []
     message: str = ""
     phase: str = "idle"
+    current_index: int = 0
+    current_title: str = ""
+    current_author: str = ""
+    paused: bool = False
 
 
 class DivarRefreshOut(BaseModel):

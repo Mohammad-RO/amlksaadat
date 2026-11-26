@@ -101,6 +101,18 @@ export async function divarSyncStatus() {
   return request<DivarSync>("/admin/divar/sync");
 }
 
+export async function pauseDivarSync() {
+  return request<DivarSync>("/admin/divar/sync/pause", { method: "POST" });
+}
+
+export async function resumeDivarSync() {
+  return request<DivarSync>("/admin/divar/sync/resume", { method: "POST" });
+}
+
+export async function cancelDivarSync() {
+  return request<DivarSync>("/admin/divar/sync/cancel", { method: "POST" });
+}
+
 export async function startDivarLogin(phone: string) {
   return request<{ ok: boolean }>("/admin/divar/login/start", {
     method: "POST",

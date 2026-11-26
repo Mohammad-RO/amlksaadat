@@ -32,11 +32,18 @@ class SyncStatus:
     errors: list[str] = field(default_factory=list)
     message: str = ""
     phase: str = "idle"
+    current_index: int = 0
+    current_title: str = ""
+    current_author: str = ""
+    paused: bool = False
 
 
 _status = SyncStatus()
 _task: asyncio.Task | None = None
 _lock = asyncio.Lock()
+_gate = asyncio.Event()
+_gate.set()
+_generation = 0
 
 
 def sync_status() -> SyncStatus:
@@ -44,10 +51,18 @@ def sync_status() -> SyncStatus:
 
 
 async def start_sync() -> SyncStatus:
-    global _task
+    global _task, _generation
     async with _lock:
-        if _task is not None and not _task.done():
+        if _task is not None and not _task.done() and _status.running:
             return _status
+        previous = _task
+        if previous is not None and not previous.done():
+            previous.cancel()
+            _gate.set()
+            try:
+                await previous
+            except (asyncio.CancelledError, Exception):
+                pass
         db = SessionLocal()
         try:
             row = db.get(DivarConnection, 1)
@@ -59,38 +74,96 @@ async def start_sync() -> SyncStatus:
                 return _status
         finally:
             db.close()
+        _generation += 1
+        generation = _generation
         _reset(running=True, message="در حال بررسی لیست مشاوران", phase="colleagues")
-        _task = asyncio.create_task(_run())
+        _task = asyncio.create_task(_run(generation))
         return _status
+
+
+def pause_sync() -> SyncStatus:
+    if _status.running:
+        _status.paused = True
+        _gate.clear()
+    return _status
+
+
+def resume_sync() -> SyncStatus:
+    if _status.running and _status.paused:
+        _status.paused = False
+        _gate.set()
+    return _status
+
+
+def cancel_sync() -> SyncStatus:
+    global _generation
+    _generation += 1
+    _status.running = False
+    _status.paused = False
+    _status.phase = "idle"
+    _status.message = ""
+    _status.current_index = 0
+    _status.current_title = ""
+    _status.current_author = ""
+    _gate.set()
+    if _task is not None and not _task.done():
+        _task.cancel()
+    return _status
+
+
+async def _wait_if_paused(generation: int | None = None) -> None:
+    expected = _generation if generation is None else generation
+    await _gate.wait()
+    if expected != _generation:
+        raise asyncio.CancelledError
 
 
 def _reset(**kwargs) -> None:
     global _status
+    _gate.set()
     _status = SyncStatus(**kwargs)
 
 
-async def _run() -> None:
+async def _run(generation: int) -> None:
     try:
         await asyncio.to_thread(_sync_colleagues)
+        if generation != _generation:
+            return
         _status.colleagues_ready = True
+        _status.message = "لیست مشاوران بررسی شد"
+        await _wait_if_paused(generation)
+        await asyncio.sleep(1.2)
+        await _wait_if_paused(generation)
         _status.phase = "counting"
-        _status.message = "بررسی لیست مشاوران"
+        _status.message = "در حال خواندن آگهی‌های فعال"
+        await _wait_if_paused(generation)
         cookies, front_token, posts_ready = await asyncio.to_thread(_session_flags)
         if not posts_ready:
             _status.phase = "done"
             _status.message = "بررسی لیست مشاوران. لینک آگهی‌ها ثبت نشده است."
             _status.running = False
+            _status.paused = False
             return
+        await _wait_if_paused(generation)
         posts = await asyncio.to_thread(fetch_active_posts, cookies, front_token)
+        if generation != _generation:
+            return
         _status.total = len(posts)
         _status.phase = "sending"
+        _status.message = ""
         people = await asyncio.to_thread(_colleague_pairs)
         kept: set[str] = set()
         catalog_complete = True
-        for post in posts:
+        for index, post in enumerate(posts, start=1):
+            await _wait_if_paused(generation)
+            _status.current_index = index
+            _status.current_title = post.title
+            _status.current_author = post.author
             try:
                 url, token = await _resolve_post(post, cookies, front_token)
             except DivarLoginRequired:
+                raise
+            except asyncio.CancelledError:
                 raise
             except AppError as exc:
                 catalog_complete = False
@@ -106,6 +179,8 @@ async def _run() -> None:
                 outcome = await _import_resolved(post, people, url, token)
             except DivarLoginRequired:
                 raise
+            except asyncio.CancelledError:
+                raise
             except AppError as exc:
                 _remember_error(post.title, exc.message)
                 continue
@@ -118,25 +193,50 @@ async def _run() -> None:
             else:
                 _status.skipped += 1
             _status.completed = _status.sent + _status.skipped
+        if generation != _generation:
+            return
         if catalog_complete:
             _status.removed = await asyncio.to_thread(retain_active_listings, kept)
         else:
             _remember_error("حذف آگهی‌ها", "چون خواندن بعضی آگهی‌ها ناتمام ماند، آگهی قبلی از بات حذف نشد.")
+        _status.current_index = 0
+        _status.current_title = ""
+        _status.current_author = ""
         _status.phase = "done"
-        _status.message = "بررسی لیست مشاوران"
+        _status.message = ""
+        _status.paused = False
         _status.running = False
+    except asyncio.CancelledError:
+        if generation == _generation:
+            _status.running = False
+            _status.paused = False
+            _status.phase = "idle"
+            _status.message = ""
+            _status.current_index = 0
+            _status.current_title = ""
+            _status.current_author = ""
+        return
     except DivarLoginRequired:
+        if generation != _generation:
+            return
         _status.needs_login = True
         _status.phase = "failed"
+        _status.paused = False
         _status.running = False
         _status.message = "ورود به دیوار لازم است."
     except AppError as exc:
+        if generation != _generation:
+            return
         _status.phase = "failed"
+        _status.paused = False
         _status.running = False
         _status.message = exc.message
     except Exception:
+        if generation != _generation:
+            return
         logger.exception("divar sync failed")
         _status.phase = "failed"
+        _status.paused = False
         _status.running = False
         _status.message = "بروزرسانی دیوار ناتمام ماند."
 

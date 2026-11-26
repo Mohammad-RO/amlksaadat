@@ -1,9 +1,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   ApiError,
+  cancelDivarSync,
   confirmDivarLogin,
   divarColleagues,
   divarSyncStatus,
+  pauseDivarSync,
+  resumeDivarSync,
   saveDivarLink,
   saveDivarPostsLink,
   startDivarLogin,
@@ -41,6 +44,7 @@ export function DivarColleaguesSection() {
   const [progressOpen, setProgressOpen] = useState(false);
   const [sync, setSync] = useState<DivarSync | null>(null);
   const pollRef = useRef<number | null>(null);
+  const progressOpenRef = useRef(false);
   const locked = Boolean(savedUrl) && !editing;
   const postsLocked = Boolean(savedPostsUrl) && !postsEditing;
 
@@ -107,10 +111,34 @@ export function DivarColleaguesSection() {
     setItems(state.items);
   }
 
+  function openProgress() {
+    progressOpenRef.current = true;
+    setProgressOpen(true);
+  }
+
+  async function onCloseProgress() {
+    progressOpenRef.current = false;
+    if (pollRef.current) window.clearTimeout(pollRef.current);
+    const active = Boolean(sync?.running);
+    setProgressOpen(false);
+    setSync((current) => (current ? { ...current, running: false, paused: false } : current));
+    if (!active) return;
+    try {
+      const status = await cancelDivarSync();
+      if (!progressOpenRef.current) {
+        setSync({ ...status, running: false, paused: false });
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "بستن بروزرسانی انجام نشد.");
+    }
+  }
+
   async function watchSync() {
     const status = await divarSyncStatus();
+    if (!progressOpenRef.current) return;
     setSync(status);
     if (status.needs_login) {
+      progressOpenRef.current = false;
       setProgressOpen(false);
       setLoginStep("phone");
       setCode("");
@@ -125,6 +153,24 @@ export function DivarColleaguesSection() {
     }
     const state = await divarColleagues();
     applyState(state);
+  }
+
+  async function onPause() {
+    setError("");
+    try {
+      setSync(await pauseDivarSync());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "توقف بروزرسانی انجام نشد.");
+    }
+  }
+
+  async function onResume() {
+    setError("");
+    try {
+      setSync(await resumeDivarSync());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "ادامه بروزرسانی انجام نشد.");
+    }
   }
 
   async function onRefresh() {
@@ -144,7 +190,7 @@ export function DivarColleaguesSection() {
         setError(status.message || "بروزرسانی شروع نشد.");
         return;
       }
-      setProgressOpen(true);
+      openProgress();
       await watchSync();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "بروزرسانی انجام نشد.");
@@ -180,7 +226,7 @@ export function DivarColleaguesSection() {
         setLoginOpen(true);
         return;
       }
-      setProgressOpen(true);
+      openProgress();
       await watchSync();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "ورود به دیوار انجام نشد.");
@@ -280,7 +326,7 @@ export function DivarColleaguesSection() {
       {(savedUrl || savedPostsUrl) && (
         <button
           type="button"
-          disabled={busy || Boolean(sync?.running)}
+          disabled={busy || (progressOpen && Boolean(sync?.running))}
           className="mt-4 rounded-2xl bg-pine px-5 py-3 text-sm text-white disabled:opacity-60"
           onClick={onRefresh}
         >
@@ -333,12 +379,32 @@ export function DivarColleaguesSection() {
       {progressOpen && sync && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/40 px-4">
           <div className="w-full max-w-md rounded-3xl bg-paper p-6">
-            <h2 className="text-lg font-semibold">بروزرسانی دیوار</h2>
-            {sync.phase === "colleagues" && <p className="mt-3 text-sm leading-7">در حال بررسی لیست مشاوران</p>}
-            {sync.colleagues_ready && <p className="mt-3 text-sm leading-7">بررسی لیست مشاوران</p>}
-            {sync.phase === "counting" && <p className="mt-2 text-sm leading-7">در حال شمارش آگهی‌های فعال</p>}
-            {(sync.phase === "sending" || sync.phase === "done") && !sync.message.includes("لینک آگهی") && (
-              <p className="mt-2 text-sm leading-7">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-lg font-semibold">بروزرسانی دیوار</h2>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none text-ink/70 hover:bg-sand"
+                aria-label="بستن"
+                onClick={() => void onCloseProgress()}
+              >
+                ×
+              </button>
+            </div>
+            {sync.phase === "colleagues" && (
+              <p className="mt-3 text-sm leading-7">{sync.colleagues_ready ? "لیست مشاوران بررسی شد" : "در حال بررسی لیست مشاوران"}</p>
+            )}
+            {sync.phase === "counting" && <p className="mt-3 text-sm leading-7">در حال خواندن آگهی‌های فعال</p>}
+            {sync.phase === "sending" && (
+              <div className="mt-3 text-sm leading-7">
+                <p>
+                  {sync.current_index} از {sync.total}
+                </p>
+                {sync.current_title && <p className="mt-2">{sync.current_title}</p>}
+                {sync.current_author && <p className="text-ink/70">مشاور: {sync.current_author}</p>}
+              </div>
+            )}
+            {sync.phase === "done" && !sync.message.includes("لینک آگهی") && sync.total > 0 && (
+              <p className="mt-3 text-sm leading-7">
                 {sync.completed} از {sync.total}
               </p>
             )}
@@ -348,6 +414,7 @@ export function DivarColleaguesSection() {
             {sync.phase === "done" && sync.message.includes("لینک آگهی") && (
               <p className="mt-2 text-sm leading-7 text-copper">{sync.message}</p>
             )}
+            {sync.paused && <p className="mt-3 text-sm leading-7 text-copper">پردازش متوقف شد</p>}
             {sync.phase === "failed" && <p className="mt-2 text-sm leading-7 text-danger">{sync.message}</p>}
             {sync.errors.length > 0 && (
               <ul className="mt-3 max-h-40 space-y-2 overflow-auto text-sm leading-7 text-danger">
@@ -356,11 +423,23 @@ export function DivarColleaguesSection() {
                 ))}
               </ul>
             )}
-            {!sync.running && (
-              <button type="button" className="mt-4 rounded-2xl border border-line px-5 py-3" onClick={() => setProgressOpen(false)}>
-                بستن
-              </button>
-            )}
+            <div className="mt-4 flex gap-2">
+              {sync.running && !sync.paused && (
+                <button type="button" className="rounded-2xl border border-line px-5 py-3" onClick={() => void onPause()}>
+                  توقف
+                </button>
+              )}
+              {sync.running && sync.paused && (
+                <button type="button" className="rounded-2xl bg-pine px-5 py-3 text-white" onClick={() => void onResume()}>
+                  ادامه
+                </button>
+              )}
+              {!sync.running && (
+                <button type="button" className="rounded-2xl border border-line px-5 py-3" onClick={() => void onCloseProgress()}>
+                  بستن
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

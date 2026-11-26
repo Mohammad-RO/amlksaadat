@@ -19,7 +19,7 @@ from app.schemas import (
     DivarRefreshOut,
     DivarSyncOut,
 )
-from app.services.divar_import import start_sync, sync_status
+from app.services.divar_import import cancel_sync, pause_sync, resume_sync, start_sync, sync_status
 from app.services.divar_panel import (
     DivarLoginRequired,
     colleague_rows,
@@ -123,6 +123,10 @@ def _sync_out() -> DivarSyncOut:
         errors=list(status.errors),
         message=status.message,
         phase=status.phase,
+        current_index=status.current_index,
+        current_title=status.current_title,
+        current_author=status.current_author,
+        paused=status.paused,
     )
 
 
@@ -163,6 +167,24 @@ async def begin_divar_sync() -> DivarSyncOut:
 
 @router.get("/divar/sync", response_model=DivarSyncOut)
 def read_divar_sync() -> DivarSyncOut:
+    return _sync_out()
+
+
+@router.post("/divar/sync/pause", response_model=DivarSyncOut)
+def pause_divar_sync() -> DivarSyncOut:
+    pause_sync()
+    return _sync_out()
+
+
+@router.post("/divar/sync/resume", response_model=DivarSyncOut)
+def resume_divar_sync() -> DivarSyncOut:
+    resume_sync()
+    return _sync_out()
+
+
+@router.post("/divar/sync/cancel", response_model=DivarSyncOut)
+def cancel_divar_sync() -> DivarSyncOut:
+    cancel_sync()
     return _sync_out()
 
 

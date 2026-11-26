@@ -38,6 +38,10 @@ export type DivarSync = {
   errors: string[];
   message: string;
   phase: string;
+  current_index: number;
+  current_title: string;
+  current_author: string;
+  paused: boolean;
 };
 
 export type DivarRefresh = {

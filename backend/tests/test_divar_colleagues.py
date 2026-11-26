@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 
 from sqlalchemy import create_engine
@@ -249,3 +250,50 @@ class DivarColleagueSyncTest(unittest.TestCase):
         post.price = 1_000
         post.image_urls = ["https://img/b.jpg"]
         self.assertTrue(listing_content_changed(listing, post))
+
+
+class DivarSyncPauseTest(unittest.TestCase):
+    def tearDown(self):
+        from app.services import divar_import
+
+        divar_import._gate.set()
+        divar_import._status = divar_import.SyncStatus()
+
+    def test_pause_holds_until_resume(self):
+        from app.services import divar_import
+
+        async def main():
+            divar_import._gate = asyncio.Event()
+            divar_import._gate.set()
+            divar_import._status.running = True
+            divar_import.pause_sync()
+            self.assertTrue(divar_import.sync_status().paused)
+            task = asyncio.create_task(divar_import._wait_if_paused())
+            await asyncio.sleep(0.05)
+            self.assertFalse(task.done())
+            divar_import.resume_sync()
+            await task
+            self.assertFalse(divar_import.sync_status().paused)
+
+        asyncio.run(main())
+
+    def test_cancel_stops_instead_of_resuming(self):
+        from app.services import divar_import
+
+        async def main():
+            divar_import._gate = asyncio.Event()
+            divar_import._gate.set()
+            divar_import._status.running = True
+            divar_import._status.phase = "sending"
+            divar_import.pause_sync()
+            task = asyncio.create_task(divar_import._wait_if_paused())
+            await asyncio.sleep(0.05)
+            divar_import.cancel_sync()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            resumed = divar_import.resume_sync()
+            self.assertFalse(resumed.running)
+            self.assertFalse(resumed.paused)
+            self.assertEqual(resumed.phase, "idle")
+
+        asyncio.run(main())
