@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +16,7 @@ from app.schemas import (
     DivarColleagueOut,
     DivarColleaguesOut,
     DivarLinkIn,
+    DivarSyncReportOut,
     DivarPhoneIn,
     DivarRefreshOut,
     DivarSyncOut,
@@ -32,6 +34,7 @@ from app.services.divar_panel import (
 from app.utils import format_jalali, normalize_phone
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+logger = logging.getLogger(__name__)
 
 
 def _agent_out(agent: Agent, count: int) -> AgentOut:
@@ -109,19 +112,32 @@ def _divar_state(db: Session) -> tuple[str, str, str, list[DivarColleagueOut]]:
     return url, posts_url, token, _divar_items(db, token)
 
 
+def _report_out(raw: object) -> DivarSyncReportOut | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return DivarSyncReportOut.model_validate(raw)
+    except Exception:
+        logger.exception("sync report could not be read")
+        return None
+
+
 def _colleagues_out(db: Session, url: str, posts_url: str, business_token: str) -> DivarColleaguesOut:
     row = db.get(DivarConnection, 1)
     stamp = ""
     note = ""
+    report = None
     if row is not None and row.last_sync_at is not None:
         stamp = format_jalali(row.last_sync_at)
         note = sync_result_note(row.last_sync_complete, row.last_sync_done, row.last_sync_total, row.last_sync_listed)
+        report = _report_out(row.last_sync_report)
     return DivarColleaguesOut(
         url=url,
         posts_url=posts_url,
         items=_divar_items(db, business_token),
         last_sync_at=stamp,
         last_sync_note=note,
+        last_sync_report=report,
     )
 
 
@@ -168,7 +184,7 @@ def save_divar_posts_link(body: DivarLinkIn, db: Session = Depends(get_db)) -> D
 def refresh_divar_colleagues(db: Session = Depends(get_db)) -> DivarRefreshOut:
     url, _, _, items = _divar_state(db)
     try:
-        _, added, removed, updated = refresh_colleagues(db)
+        _, added, removed, updated, _diff = refresh_colleagues(db)
     except DivarLoginRequired:
         return DivarRefreshOut(needs_login=True, url=url, items=items)
     _, _, _, items = _divar_state(db)

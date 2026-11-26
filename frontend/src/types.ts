@@ -20,12 +20,34 @@ export type DivarColleague = {
   phone: string;
 };
 
+export type DivarSyncChange = {
+  label: string;
+  old: string;
+  new: string;
+};
+
+export type DivarSyncReport = {
+  colleagues_added: string[];
+  colleagues_removed: string[];
+  colleague_phones: { name: string; old_phone: string; new_phone: string }[];
+  colleague_renames: { old_name: string; new_name: string }[];
+  ads_added: { title: string; consultant: string }[];
+  ads_removed: { title: string; consultant: string }[];
+  unchanged: number;
+  consultant_changes: { title: string; old_name: string; new_name: string }[];
+  spec_changes: { title: string; consultant: string; changes: DivarSyncChange[] }[];
+  errors: { title: string; reason: string }[];
+  deletions_applied: boolean;
+  list_ready: boolean;
+};
+
 export type DivarColleagues = {
   url: string;
   posts_url: string;
   items: DivarColleague[];
   last_sync_at: string;
   last_sync_note: string;
+  last_sync_report: DivarSyncReport | null;
 };
 
 export type DivarSync = {

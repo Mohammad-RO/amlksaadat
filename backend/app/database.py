@@ -70,6 +70,7 @@ def init_db() -> None:
             _ensure_column(connection, "divar_connection", "last_sync_done", "INTEGER NOT NULL DEFAULT 0")
             _ensure_column(connection, "divar_connection", "last_sync_total", "INTEGER NOT NULL DEFAULT 0")
             _ensure_column(connection, "divar_connection", "last_sync_listed", "BOOLEAN NOT NULL DEFAULT 0")
+            _ensure_column(connection, "divar_connection", "last_sync_report", "TEXT")
             _ensure_column(connection, "buyer_sessions", "category", "VARCHAR(20) NOT NULL DEFAULT ''")
             _ensure_column(connection, "buyer_sessions", "deal_type", "VARCHAR(20) NOT NULL DEFAULT ''")
             _ensure_column(connection, "buyer_sessions", "deposit_min", "BIGINT")

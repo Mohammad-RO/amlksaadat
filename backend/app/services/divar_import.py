@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -40,7 +41,25 @@ class SyncStatus:
     list_ready: bool = False
 
 
+def blank_sync_report() -> dict:
+    return {
+        "colleagues_added": [],
+        "colleagues_removed": [],
+        "colleague_phones": [],
+        "colleague_renames": [],
+        "ads_added": [],
+        "ads_removed": [],
+        "unchanged": 0,
+        "consultant_changes": [],
+        "spec_changes": [],
+        "errors": [],
+        "deletions_applied": False,
+        "list_ready": False,
+    }
+
+
 _status = SyncStatus()
+_report = blank_sync_report()
 _task: asyncio.Task | None = None
 _lock = asyncio.Lock()
 _gate = asyncio.Event()
@@ -106,6 +125,8 @@ def sync_result_note(complete: bool, done: int, total: int, listed: bool) -> str
 
 
 def save_sync_mark(complete: bool, done: int, total: int, listed: bool) -> None:
+    payload = copy.deepcopy(_report)
+    payload["list_ready"] = listed
     db = SessionLocal()
     try:
         row = db.get(DivarConnection, 1)
@@ -116,6 +137,7 @@ def save_sync_mark(complete: bool, done: int, total: int, listed: bool) -> None:
         row.last_sync_done = done
         row.last_sync_total = total
         row.last_sync_listed = listed
+        row.last_sync_report = payload
         db.commit()
     except Exception:
         db.rollback()
@@ -150,9 +172,10 @@ async def _wait_if_paused(generation: int | None = None) -> None:
 
 
 def _reset(**kwargs) -> None:
-    global _status
+    global _status, _report
     _gate.set()
     _status = SyncStatus(**kwargs)
+    _report = blank_sync_report()
 
 
 async def _run(generation: int) -> None:
@@ -228,11 +251,14 @@ async def _run(generation: int) -> None:
             _status.completed = _status.sent + _status.skipped
         if generation != _generation:
             return
-        await asyncio.to_thread(save_sync_mark, catalog_complete, _status.completed, _status.total, True)
         if catalog_complete:
-            _status.removed = await asyncio.to_thread(retain_active_listings, kept)
+            removed_rows = await asyncio.to_thread(retain_active_listings, kept)
+            _report["ads_removed"] = removed_rows
+            _report["deletions_applied"] = True
+            _status.removed = len(removed_rows)
         else:
-            _remember_error("حذف آگهی‌ها", "چون خواندن بعضی آگهی‌ها ناتمام ماند، آگهی قبلی از بات حذف نشد.")
+            _remember_error("حذف آگهی‌ها", "چون خواندن بعضی آگهی‌ها ناتمام ماند، آگهی قبلی از بات حذف نشد.", report=False)
+        await asyncio.to_thread(save_sync_mark, catalog_complete, _status.completed, _status.total, True)
         _status.current_index = 0
         _status.current_title = ""
         _status.current_author = ""
@@ -281,7 +307,11 @@ async def _run(generation: int) -> None:
 def _sync_colleagues() -> None:
     db = SessionLocal()
     try:
-        refresh_colleagues(db)
+        _, _, _, _, diff = refresh_colleagues(db)
+        _report["colleagues_added"] = list(diff.added)
+        _report["colleagues_removed"] = list(diff.removed)
+        _report["colleague_phones"] = list(diff.phones)
+        _report["colleague_renames"] = list(diff.renames)
     finally:
         db.close()
 
@@ -321,17 +351,38 @@ async def _import_resolved(post, people: list[tuple[str, str]], url: str, token:
     try:
         existing = db.query(Listing).filter(Listing.divar_token == token).one_or_none()
         if existing:
-            if apply_consultant_change(existing, post.author, people):
+            old_name = existing.consultant_name
+            consultant_changed = apply_consultant_change(existing, post.author, people)
+            if consultant_changed:
                 db.commit()
-            if await refresh_listing_content(db, existing):
+                _report["consultant_changes"].append(
+                    {
+                        "title": post.title or existing.title,
+                        "old_name": old_name,
+                        "new_name": existing.consultant_name,
+                    }
+                )
+            changes = await refresh_listing_content(db, existing)
+            if changes:
+                _report["spec_changes"].append(
+                    {
+                        "title": existing.title,
+                        "consultant": existing.consultant_name,
+                        "changes": changes,
+                    }
+                )
                 return "sent"
+            if not consultant_changed:
+                _report["unchanged"] += 1
             return "skipped"
         name, phone = match_colleague(post.author, people)
         agent = import_agent(db)
-        await register_listing(db, agent, url, consultant_name=name, consultant_phone=phone)
+        listing, _warnings = await register_listing(db, agent, url, consultant_name=name, consultant_phone=phone)
+        _report["ads_added"].append({"title": listing.title, "consultant": listing.consultant_name})
         return "sent"
     except AppError as exc:
         if exc.status_code == 409:
+            _report["unchanged"] += 1
             return "skipped"
         raise
     finally:
@@ -347,16 +398,16 @@ def apply_consultant_change(listing: Listing, author: str, people: list[tuple[st
     return True
 
 
-def drop_listings_outside(db, tokens: set[str]) -> int:
-    removed = 0
+def drop_listings_outside(db, tokens: set[str]) -> list[dict]:
+    removed: list[dict] = []
     for row in db.query(Listing).all():
         if row.divar_token not in tokens:
+            removed.append({"title": row.title or "آگهی", "consultant": row.consultant_name or ""})
             db.delete(row)
-            removed += 1
     return removed
 
 
-def retain_active_listings(tokens: set[str]) -> int:
+def retain_active_listings(tokens: set[str]) -> list[dict]:
     db = SessionLocal()
     try:
         removed = drop_listings_outside(db, tokens)
@@ -369,7 +420,8 @@ def retain_active_listings(tokens: set[str]) -> int:
         db.close()
 
 
-def _remember_error(title: str, detail: str) -> None:
-    if len(_status.errors) >= 30:
-        return
-    _status.errors.append(f"{title}: {detail}")
+def _remember_error(title: str, detail: str, *, report: bool = True) -> None:
+    if len(_status.errors) < 30:
+        _status.errors.append(f"{title}: {detail}")
+    if report:
+        _report["errors"].append({"title": title, "reason": detail})

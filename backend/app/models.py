@@ -113,6 +113,7 @@ class DivarConnection(Base):
     last_sync_done: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_sync_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_sync_listed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_sync_report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

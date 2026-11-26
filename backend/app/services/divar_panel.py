@@ -1,6 +1,6 @@
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -168,7 +168,15 @@ def confirm_divar_login(db, code: str) -> None:
     db.commit()
 
 
-def refresh_colleagues(db) -> tuple[bool, int, int, int]:
+@dataclass
+class ColleagueDiff:
+    added: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    phones: list[dict] = field(default_factory=list)
+    renames: list[dict] = field(default_factory=list)
+
+
+def refresh_colleagues(db) -> tuple[bool, int, int, int, ColleagueDiff]:
     row = db.get(DivarConnection, 1)
     if row is None or not row.business_token:
         raise AppError("اول لینک مدیریت همکاران را ثبت کنید.")
@@ -182,12 +190,14 @@ def refresh_colleagues(db) -> tuple[bool, int, int, int]:
     except httpx.HTTPError as exc:
         logger.warning("divar colleague refresh failed: %s", exc.__class__.__name__)
         raise AppError("ارتباط با دیوار برقرار نشد.", status_code=502) from exc
-    added, removed, updated = apply_colleague_snapshot(db, row.business_token, people)
+    added, removed, updated, diff = apply_colleague_snapshot(db, row.business_token, people)
     db.commit()
-    return False, added, removed, updated
+    return False, added, removed, updated, diff
 
 
-def apply_colleague_snapshot(db, business_token: str, people: list[ColleagueSnapshot]) -> tuple[int, int, int]:
+def apply_colleague_snapshot(
+    db, business_token: str, people: list[ColleagueSnapshot]
+) -> tuple[int, int, int, ColleagueDiff]:
     if not people:
         raise AppError("دیوار لیست همکاران را برنگرداند.")
     existing = {
@@ -197,6 +207,7 @@ def apply_colleague_snapshot(db, business_token: str, people: list[ColleagueSnap
     seen: set[str] = set()
     added = 0
     updated = 0
+    diff = ColleagueDiff()
     now = _now()
     for person in people:
         seen.add(person.relation_token)
@@ -211,9 +222,18 @@ def apply_colleague_snapshot(db, business_token: str, people: list[ColleagueSnap
                     role=person.role,
                 )
             )
+            diff.added.append(person.name)
             added += 1
             continue
-        if current.name != person.name or current.phone != person.phone or current.role != person.role:
+        renamed = name_key(current.name) != name_key(person.name)
+        phone_changed = current.phone != person.phone
+        if renamed:
+            diff.renames.append({"old_name": current.name, "new_name": person.name})
+        if phone_changed:
+            diff.phones.append(
+                {"name": person.name, "old_phone": current.phone, "new_phone": person.phone}
+            )
+        if current.name != person.name or phone_changed or current.role != person.role:
             current.name = person.name
             current.phone = person.phone
             current.role = person.role
@@ -222,9 +242,10 @@ def apply_colleague_snapshot(db, business_token: str, people: list[ColleagueSnap
     removed = 0
     for token, current in existing.items():
         if token not in seen:
+            diff.removed.append(current.name)
             db.delete(current)
             removed += 1
-    return added, removed, updated
+    return added, removed, updated, diff
 
 
 def _fetch_people(client: httpx.Client, business_token: str) -> list[ColleagueSnapshot]:

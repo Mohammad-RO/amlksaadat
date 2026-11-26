@@ -81,12 +81,67 @@ class DivarColleagueOut(BaseModel):
     phone: str
 
 
+class DivarSyncChangeOut(BaseModel):
+    label: str
+    old: str = ""
+    new: str = ""
+
+
+class DivarSyncAdOut(BaseModel):
+    title: str = ""
+    consultant: str = ""
+
+
+class DivarSyncPhoneOut(BaseModel):
+    name: str = ""
+    old_phone: str = ""
+    new_phone: str = ""
+
+
+class DivarSyncRenameOut(BaseModel):
+    old_name: str = ""
+    new_name: str = ""
+
+
+class DivarSyncConsultantOut(BaseModel):
+    title: str = ""
+    old_name: str = ""
+    new_name: str = ""
+
+
+class DivarSyncSpecOut(BaseModel):
+    title: str = ""
+    consultant: str = ""
+    changes: list[DivarSyncChangeOut] = []
+
+
+class DivarSyncErrorOut(BaseModel):
+    title: str = ""
+    reason: str = ""
+
+
+class DivarSyncReportOut(BaseModel):
+    colleagues_added: list[str] = []
+    colleagues_removed: list[str] = []
+    colleague_phones: list[DivarSyncPhoneOut] = []
+    colleague_renames: list[DivarSyncRenameOut] = []
+    ads_added: list[DivarSyncAdOut] = []
+    ads_removed: list[DivarSyncAdOut] = []
+    unchanged: int = 0
+    consultant_changes: list[DivarSyncConsultantOut] = []
+    spec_changes: list[DivarSyncSpecOut] = []
+    errors: list[DivarSyncErrorOut] = []
+    deletions_applied: bool = False
+    list_ready: bool = False
+
+
 class DivarColleaguesOut(BaseModel):
     url: str
     posts_url: str = ""
     items: list[DivarColleagueOut]
     last_sync_at: str = ""
     last_sync_note: str = ""
+    last_sync_report: DivarSyncReportOut | None = None
 
 
 class DivarSyncOut(BaseModel):

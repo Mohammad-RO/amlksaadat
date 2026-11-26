@@ -9,7 +9,7 @@ from app.errors import AppError
 from app.models import Agent, DivarColleague, Listing
 from app.services.divar import DivarPost
 from app.services.divar_import import apply_consultant_change, drop_listings_outside, sync_result_note
-from app.services.listings import listing_content_changed
+from app.services.listings import describe_listing_changes, listing_content_changed
 from app.services.llm import compose_listing_text
 from app.services.divar_panel import (
     ColleagueSnapshot,
@@ -56,7 +56,7 @@ class DivarColleagueSyncTest(unittest.TestCase):
             ],
         )
         self.db.commit()
-        added, removed, updated = apply_colleague_snapshot(
+        added, removed, updated, diff = apply_colleague_snapshot(
             self.db,
             business,
             [
@@ -66,6 +66,10 @@ class DivarColleagueSyncTest(unittest.TestCase):
         )
         self.db.commit()
         self.assertEqual((added, removed, updated), (1, 1, 1))
+        self.assertEqual(diff.added, ["فرهاد"])
+        self.assertEqual(diff.removed, ["رضا"])
+        self.assertEqual(diff.renames, [{"old_name": "ماهان", "new_name": "ماهان حسن نژاد"}])
+        self.assertEqual(diff.phones, [])
         rows = {row.relation_token: row for row in self.db.query(DivarColleague).all()}
         self.assertEqual(set(rows), {"a", "c"})
         self.assertEqual(rows["a"].name, "ماهان حسن نژاد")
@@ -184,12 +188,13 @@ class DivarColleagueSyncTest(unittest.TestCase):
         self.db.commit()
         removed = drop_listings_outside(self.db, {"keep"})
         self.db.commit()
-        self.assertEqual(removed, 1)
+        self.assertEqual(len(removed), 1)
+        self.assertEqual(removed[0]["title"], "خانه")
         left = {row.divar_token for row in self.db.query(Listing).all()}
         self.assertEqual(left, {"keep"})
         removed_all = drop_listings_outside(self.db, set())
         self.db.commit()
-        self.assertEqual(removed_all, 1)
+        self.assertEqual(len(removed_all), 1)
         self.assertEqual(self.db.query(Listing).count(), 0)
 
     def test_consultant_change_updates_name_and_phone(self):
@@ -250,6 +255,68 @@ class DivarColleagueSyncTest(unittest.TestCase):
         post.price = 1_000
         post.image_urls = ["https://img/b.jpg"]
         self.assertTrue(listing_content_changed(listing, post))
+
+    def test_phone_change_is_separate_from_rename(self):
+        business = "wgiqQiGe"
+        apply_colleague_snapshot(
+            self.db,
+            business,
+            [ColleagueSnapshot("a", "ماهان", "09122167922", "همکار")],
+        )
+        self.db.commit()
+        _added, _removed, _updated, diff = apply_colleague_snapshot(
+            self.db,
+            business,
+            [ColleagueSnapshot("a", "ماهان", "09120000000", "همکار")],
+        )
+        self.assertEqual(diff.phones, [{"name": "ماهان", "old_phone": "09122167922", "new_phone": "09120000000"}])
+        self.assertEqual(diff.renames, [])
+        self.assertEqual(diff.added, [])
+        self.assertEqual(diff.removed, [])
+
+    def test_report_describes_price_specs_and_photos(self):
+        post = DivarPost(
+            title="خانه",
+            description="توضیح تازه",
+            area=80,
+            price=1_000,
+            bedrooms=2,
+            building_year=1400,
+            image_urls=["https://img/a.jpg"],
+            specs=[("متراژ", "۸۰"), ("تعداد اتاق", "۲"), ("پارکینگ", "دارد")],
+            category="residential",
+            deal_type="sell",
+        )
+        listing = Listing(
+            agent_id=1,
+            divar_url="https://divar.ir/v/abcde",
+            divar_token="abcde",
+            title="خانه",
+            area=80,
+            price=1_000,
+            bedrooms=2,
+            building_year=1400,
+            category="residential",
+            deal_type="sell",
+            unique_code="33333333",
+            image_urls=["https://img/a.jpg"],
+            structured_text=compose_listing_text(post, "توضیح قدیمی") + "\n\nکد: 33333333",
+        )
+        self.assertEqual(describe_listing_changes(listing, post), [])
+        post.price = 2_000
+        price_changes = describe_listing_changes(listing, post)
+        self.assertEqual([item["label"] for item in price_changes], ["قیمت"])
+        post.price = 1_000
+        post.specs = [("متراژ", "۸۰"), ("تعداد اتاق", "۲"), ("پارکینگ", "ندارد")]
+        spec_changes = describe_listing_changes(listing, post)
+        parking = next(item for item in spec_changes if item["label"] == "پارکینگ")
+        self.assertEqual(parking["old"], "دارد")
+        self.assertEqual(parking["new"], "ندارد")
+        self.assertFalse(any(item["label"] == "متراژ" for item in spec_changes))
+        post.specs = [("متراژ", "۸۰"), ("تعداد اتاق", "۲"), ("پارکینگ", "دارد")]
+        post.image_urls = ["https://img/b.jpg"]
+        photo_changes = describe_listing_changes(listing, post)
+        self.assertEqual(photo_changes, [{"label": "عکس‌ها", "old": "", "new": "عوض شد"}])
 
 
 class DivarSyncPauseTest(unittest.TestCase):

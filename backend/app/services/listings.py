@@ -8,7 +8,7 @@ from app.models import Agent, Listing
 from app.services.archive import archive_configured, archive_images, archive_text
 from app.services.divar import DivarPost, fetch_divar_post
 from app.services.llm import compose_listing_text, images_belong_to_listing, rewrite_description
-from app.utils import duplicate_message, extract_divar_token
+from app.utils import duplicate_message, extract_divar_token, format_price, format_toman, format_toman_range
 
 
 IMPORT_PHONE = "09000000000"
@@ -73,12 +73,142 @@ def listing_content_changed(listing: Listing, post: DivarPost) -> bool:
     return stored_fact_text(listing.structured_text) != compose_listing_text(post, "").strip()
 
 
-async def refresh_listing_content(db: Session, listing: Listing) -> bool:
+def _plain_number(value: float | int | None) -> str:
+    if value is None:
+        return "نامشخص"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _money_span(low: int | None, high: int | None, single: int | None, *, high_first: bool = False) -> str:
+    text = format_toman_range(low, high, high_first=high_first)
+    if text:
+        return text
+    if single is not None:
+        return format_toman(single)
+    return "نامشخص"
+
+
+def _spec_rows(text: str) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for line in (text or "").splitlines():
+        raw = line.strip()
+        sep = ":" if ":" in raw else ("：" if "：" in raw else "")
+        if not sep:
+            continue
+        left, right = raw.split(sep, 1)
+        match = re.search(r"[\w\u0600-\u06FF].*", left.strip())
+        title = match.group(0).strip() if match else left.strip()
+        value = right.strip()
+        if title and value:
+            rows.append((title, value))
+    return rows
+
+
+def _spec_cover(title: str) -> str | None:
+    if "متراژ" in title:
+        return "area"
+    if "خواب" in title or "اتاق" in title:
+        return "rooms"
+    if "ساخت" in title:
+        return "year"
+    if "قیمت" in title:
+        return "price"
+    if "ودیعه" in title and "اجاره" in title:
+        return "convertible"
+    if "ودیعه" in title:
+        return "deposit"
+    if "اجاره" in title:
+        return "rent"
+    return None
+
+
+def describe_listing_changes(listing: Listing, post: DivarPost) -> list[dict]:
+    if not listing_content_changed(listing, post):
+        return []
+    changes: list[dict] = []
+    emitted: set[str] = set()
+
+    def add(key: str, label: str, old: str, new: str) -> None:
+        if old == new:
+            return
+        emitted.add(key)
+        changes.append({"label": label, "old": old, "new": new})
+
+    add("title", "عنوان", listing.title or "", post.title or "آگهی دیوار")
+    add("area", "متراژ", _plain_number(listing.area), _plain_number(post.area))
+    add("price", "قیمت", format_price(listing.price), format_price(post.price))
+    add("rooms", "خواب", _plain_number(listing.bedrooms), _plain_number(post.bedrooms))
+    add("year", "سال ساخت", _plain_number(listing.building_year), _plain_number(post.building_year))
+    add(
+        "deposit",
+        "ودیعه",
+        _money_span(listing.deposit_min, listing.deposit_max, listing.deposit),
+        _money_span(post.deposit_min, post.deposit_max, post.deposit),
+    )
+    add(
+        "rent",
+        "اجاره",
+        _money_span(listing.rent_min, listing.rent_max, listing.rent, high_first=True),
+        _money_span(post.rent_min, post.rent_max, post.rent, high_first=True),
+    )
+    add(
+        "convertible",
+        "قابل تبدیل",
+        "قابل تبدیل" if listing.rent_convertible else "غیر قابل تبدیل",
+        "قابل تبدیل" if post.rent_convertible else "غیر قابل تبدیل",
+    )
+    categories = {"residential": "مسکونی", "commercial": "اداری"}
+    deals = {"sell": "فروش", "rent": "اجاره"}
+    add(
+        "category",
+        "دسته",
+        categories.get(listing.category or "", listing.category or "نامشخص"),
+        categories.get(post.category or "", post.category or "نامشخص"),
+    )
+    add(
+        "deal",
+        "نوع معامله",
+        deals.get(listing.deal_type or "", listing.deal_type or "نامشخص"),
+        deals.get(post.deal_type or "", post.deal_type or "نامشخص"),
+    )
+    old_specs: dict[str, list[str]] = {}
+    new_specs: dict[str, list[str]] = {}
+    order: list[str] = []
+    for title, value in _spec_rows(stored_fact_text(listing.structured_text)):
+        old_specs.setdefault(title, []).append(value)
+        if title not in order:
+            order.append(title)
+    for title, value in _spec_rows(compose_listing_text(post, "").strip()):
+        new_specs.setdefault(title, []).append(value)
+        if title not in order:
+            order.append(title)
+    for title in order:
+        cover = _spec_cover(title)
+        if cover and cover in emitted:
+            continue
+        old_values = old_specs.get(title, [])
+        new_values = new_specs.get(title, [])
+        for index in range(max(len(old_values), len(new_values))):
+            old = old_values[index] if index < len(old_values) else "نبود"
+            new = new_values[index] if index < len(new_values) else "حذف شد"
+            if old != new:
+                changes.append({"label": title, "old": old, "new": new})
+    if list(listing.image_urls or []) != visible_image_urls(post):
+        changes.append({"label": "عکس‌ها", "old": "", "new": "عوض شد"})
+    if not changes:
+        changes.append({"label": "مشخصات", "old": "نسخه ذخیره‌شده", "new": "نسخه دیوار"})
+    return changes
+
+
+async def refresh_listing_content(db: Session, listing: Listing) -> list[dict]:
     post = await fetch_divar_post(listing.divar_token)
     if post.category not in {"residential", "commercial"} or post.deal_type not in {"sell", "rent"}:
         raise AppError("دسته این آگهی در دیوار جزو فروش یا اجارهٔ مسکونی و اداری نیست.", 400)
-    if not listing_content_changed(listing, post):
-        return False
+    changes = describe_listing_changes(listing, post)
+    if not changes:
+        return []
     rewritten, llm_used = await rewrite_description(post.description)
     structured = compose_listing_text(post, rewritten).rstrip()
     structured = f"{structured}\n\nکد: {listing.unique_code}" if structured else f"کد: {listing.unique_code}"
@@ -108,7 +238,7 @@ async def refresh_listing_content(db: Session, listing: Listing) -> bool:
     listing.llm_used = llm_used
     db.commit()
     await archive_text(structured)
-    return True
+    return changes
 
 
 def _searchable(listing: Listing) -> bool:
