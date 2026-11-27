@@ -3,6 +3,7 @@ import {
   ApiError,
   cancelDivarSync,
   confirmDivarLogin,
+  deleteDivarData,
   divarColleagues,
   divarSyncStatus,
   pauseDivarSync,
@@ -192,6 +193,7 @@ export function DivarColleaguesSection() {
   const [lastSyncReport, setLastSyncReport] = useState<DivarSyncReport | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [linksOpen, setLinksOpen] = useState(false);
+  const [wipeOpen, setWipeOpen] = useState(false);
   const pollRef = useRef<number | null>(null);
   const progressOpenRef = useRef(false);
   const locked = Boolean(savedUrl) && !editing;
@@ -350,6 +352,23 @@ export function DivarColleaguesSection() {
       await watchSync();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "بروزرسانی انجام نشد.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onWipe() {
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      applyState(await deleteDivarData());
+      setListOpen(false);
+      setReportOpen(false);
+      setWipeOpen(false);
+      setNote("آگهی‌ها و لیست مشاوران حذف شد.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "حذف اطلاعات انجام نشد.");
     } finally {
       setBusy(false);
     }
@@ -521,6 +540,14 @@ export function DivarColleaguesSection() {
               آخرین بروزرسانی {lastSyncAt} ({lastSyncNote})
             </p>
           )}
+          <button
+            type="button"
+            disabled={busy || (progressOpen && Boolean(sync?.running))}
+            className="ms-auto rounded-full bg-[#c0392b] px-5 py-2.5 text-sm text-white shadow-sm disabled:opacity-60"
+            onClick={() => setWipeOpen(true)}
+          >
+            حذف اطلاعات
+          </button>
         </div>
       )}
 
@@ -656,6 +683,35 @@ export function DivarColleaguesSection() {
                   بستن
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wipeOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 px-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6">
+            <h2 className="text-lg font-semibold">حذف اطلاعات</h2>
+            <p className="mt-3 text-sm leading-7">
+              با زدن این گزینه، همه داده‌های دیتابیس تلگرام حذف می‌شوند. آیا مطمئن هستید؟
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-full bg-[#c0392b] px-5 py-3 text-sm text-white disabled:opacity-60"
+                onClick={() => void onWipe()}
+              >
+                بله
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-2xl border border-line px-5 py-3 text-sm"
+                onClick={() => setWipeOpen(false)}
+              >
+                خیر
+              </button>
             </div>
           </div>
         </div>

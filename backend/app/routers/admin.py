@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_admin
-from app.models import Agent, DivarConnection, Listing
+from app.models import Agent, DivarColleague, DivarConnection, Listing
 from app.schemas import (
     AgentCreate,
     AgentOut,
@@ -218,6 +218,25 @@ def resume_divar_sync() -> DivarSyncOut:
 def cancel_divar_sync() -> DivarSyncOut:
     cancel_sync()
     return _sync_out()
+
+
+@router.delete("/divar/data", response_model=DivarColleaguesOut)
+def delete_divar_data(db: Session = Depends(get_db)) -> DivarColleaguesOut:
+    if sync_status().running:
+        raise HTTPException(status_code=409, detail="اول بروزرسانی را ببندید، بعد اطلاعات را حذف کنید.")
+    db.query(Listing).delete(synchronize_session=False)
+    db.query(DivarColleague).delete(synchronize_session=False)
+    row = db.get(DivarConnection, 1)
+    if row is not None:
+        row.last_sync_at = None
+        row.last_sync_complete = False
+        row.last_sync_done = 0
+        row.last_sync_total = 0
+        row.last_sync_listed = False
+        row.last_sync_report = None
+    db.commit()
+    url, posts_url, token, _ = _divar_state(db)
+    return _colleagues_out(db, url, posts_url, token)
 
 
 @router.post("/divar/login/start")

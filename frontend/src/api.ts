@@ -113,6 +113,10 @@ export async function cancelDivarSync() {
   return request<DivarSync>("/admin/divar/sync/cancel", { method: "POST" });
 }
 
+export async function deleteDivarData() {
+  return request<DivarColleagues>("/admin/divar/data", { method: "DELETE" });
+}
+
 export async function startDivarLogin(phone: string) {
   return request<{ ok: boolean }>("/admin/divar/login/start", {
     method: "POST",
