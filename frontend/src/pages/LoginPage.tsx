@@ -52,10 +52,15 @@ export function LoginPage() {
         </div>
       </section>
 
-      <section dir="rtl" className="flex items-center justify-center px-5 py-12">
-        <form onSubmit={onSubmit} className="w-full max-w-md rounded-3xl border border-line bg-paper p-7 shadow-sm">
+      <section dir="rtl" className="relative flex items-center justify-center overflow-hidden px-5 py-12">
+        <div className="pointer-events-none absolute -right-16 top-10 h-56 w-56 rounded-full bg-white/80" />
+        <div className="pointer-events-none absolute bottom-8 left-6 h-40 w-40 rounded-full bg-[#d7ebda]/80" />
+        <form
+          onSubmit={onSubmit}
+          className="relative w-full max-w-md rounded-3xl border border-white/80 bg-white/55 p-7 shadow-[0_24px_60px_rgba(30,74,56,0.10)] backdrop-blur-2xl"
+        >
           <h2 className="text-center text-2xl font-semibold">ورود به سامانه</h2>
-          <div className="mt-6 flex rounded-full bg-sand p-1 text-sm">
+          <div className="mt-6 flex rounded-full bg-white/50 p-1 text-sm">
             <button
               type="button"
               className={`flex-1 rounded-full px-3 py-2 ${mode === "admin" ? "bg-pine text-white" : "text-ink/70"}`}
@@ -76,7 +81,7 @@ export function LoginPage() {
             <label className="mt-6 block text-sm">
               شماره موبایل
               <input
-                className="mt-2 w-full rounded-2xl border border-line bg-white px-4 py-3 text-base outline-none focus:border-pine"
+                className="mt-2 w-full rounded-2xl border border-[#1e4a38]/30 bg-white px-4 py-3 text-base shadow-[inset_0_1px_2px_rgba(30,74,56,0.06)] outline-none focus:border-[#1f8a45]"
                 inputMode="tel"
                 placeholder="0912xxxxxxx"
                 value={phone}
@@ -89,7 +94,7 @@ export function LoginPage() {
               <label className="block text-sm">
                 نام کاربری
                 <input
-                  className="mt-2 w-full rounded-2xl border border-line bg-white px-4 py-3 outline-none focus:border-pine"
+                  className="mt-2 w-full rounded-2xl border border-[#1e4a38]/30 bg-white px-4 py-3 shadow-[inset_0_1px_2px_rgba(30,74,56,0.06)] outline-none focus:border-[#1f8a45]"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                   required
@@ -99,7 +104,7 @@ export function LoginPage() {
                 رمز عبور
                 <input
                   type="password"
-                  className="mt-2 w-full rounded-2xl border border-line bg-white px-4 py-3 outline-none focus:border-pine"
+                  className="mt-2 w-full rounded-2xl border border-[#1e4a38]/30 bg-white px-4 py-3 shadow-[inset_0_1px_2px_rgba(30,74,56,0.06)] outline-none focus:border-[#1f8a45]"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
@@ -113,7 +118,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={busy}
-            className="mt-6 w-full rounded-2xl bg-copper px-4 py-3 font-medium text-white disabled:opacity-60"
+            className="mt-6 w-full rounded-2xl border border-white/40 bg-[#1f8a45]/75 px-4 py-3 font-medium text-white shadow-[0_10px_28px_rgba(31,138,69,0.28),inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-xl disabled:opacity-60"
           >
             {busy ? "در حال بررسی..." : "ورود"}
           </button>

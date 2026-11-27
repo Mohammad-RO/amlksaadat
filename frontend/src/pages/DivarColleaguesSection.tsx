@@ -566,17 +566,17 @@ export function DivarColleaguesSection() {
         </button>
         {listOpen && (
           <table className="w-full border-t border-line text-sm">
-            <thead className="bg-sand text-ink/70">
+            <thead className="bg-[#e8f6ec] text-[#1e4a38]">
               <tr>
                 <th className="px-4 py-3 text-right font-medium">نام</th>
-                <th className="px-4 py-3 text-right font-medium">شماره</th>
+                <th className="px-4 py-3 text-left font-medium">شماره</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-line">
                   <td className="px-4 py-3">{item.name}</td>
-                  <td className="px-4 py-3" dir="ltr">
+                  <td className="px-4 py-3 text-left" dir="ltr">
                     {item.phone}
                   </td>
                 </tr>
@@ -597,7 +597,7 @@ export function DivarColleaguesSection() {
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/40 px-4">
           <div className="w-full max-w-md rounded-3xl bg-paper p-6">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-lg font-semibold">بروزرسانی دیوار</h2>
+              <h2 className="text-lg font-semibold">بروز رسانی بات تلگرام</h2>
               <button
                 type="button"
                 className="flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none text-ink/70 hover:bg-sand"
