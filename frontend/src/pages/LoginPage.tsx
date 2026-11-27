@@ -4,7 +4,7 @@ import { ApiError, loginAdmin, loginAgent } from "../api";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"agent" | "admin">("agent");
+  const [mode, setMode] = useState<"agent" | "admin">("admin");
   const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -31,41 +31,44 @@ export function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="hidden flex-col justify-between bg-pine px-12 py-10 text-sand lg:flex">
-        <p className="text-sm tracking-[0.18em] text-sand/70">سعادت‌آباد</p>
-        <div>
-          <h1 className="max-w-md text-4xl font-semibold leading-relaxed">ثبت فایل دیوار، پیشنهاد خانه در تلگرام</h1>
-          <p className="mt-6 max-w-md leading-8 text-sand/80">
-            مشاور لینک آگهی را ثبت می‌کند. خریدار در ربات، متراژ و قیمت و خواب را می‌گوید و فقط خانه‌های نزدیک به همان
-            بازه را می‌بیند.
-          </p>
+    <main dir="ltr" className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="relative hidden overflow-hidden bg-pine text-sand lg:flex">
+        <div className="pointer-events-none absolute -left-20 top-8 h-64 w-64 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -bottom-24 right-[-3rem] h-80 w-80 rounded-full bg-black/10" />
+        <div className="relative flex w-full flex-col items-center justify-center px-10">
+          <svg className="h-52 w-72" viewBox="0 0 320 220" fill="none" aria-hidden="true">
+            <path d="M16 168h288" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1.5" />
+            <path d="M46 168V122h28v46" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.5" />
+            <path d="M52 122 60 110l8 12" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.5" strokeLinejoin="round" />
+            <path d="M236 168V108h36v60" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.5" />
+            <path d="M244 108 254 94l10 14" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.5" strokeLinejoin="round" />
+            <path d="M92 168V78l68-46 68 46v90" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
+            <path d="M148 168v-42h24v42" stroke="currentColor" strokeWidth="1.75" />
+            <path d="M112 104h18v16h-18zM190 104h18v16h-18z" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="160" cy="34" r="3" fill="currentColor" fillOpacity="0.8" />
+          </svg>
+          <p className="brand-word mt-8 text-3xl font-medium">IranHouseVIP</p>
+          <span className="mt-5 h-px w-14 bg-sand/60" />
         </div>
-        <ol className="grid max-w-lg grid-cols-3 gap-4 text-sm">
-          <li className="border-t border-sand/30 pt-3">ورود با شماره مجاز</li>
-          <li className="border-t border-sand/30 pt-3">استخراج آگهی دیوار</li>
-          <li className="border-t border-sand/30 pt-3">تطبیق با بازه ۱۵ درصد</li>
-        </ol>
       </section>
 
-      <section className="flex items-center justify-center px-5 py-12">
+      <section dir="rtl" className="flex items-center justify-center px-5 py-12">
         <form onSubmit={onSubmit} className="w-full max-w-md rounded-3xl border border-line bg-paper p-7 shadow-sm">
-          <p className="text-sm text-moss">املاک سعادت‌آباد</p>
-          <h2 className="mt-2 text-2xl font-semibold">ورود به سامانه</h2>
-          <div className="mt-6 grid grid-cols-2 rounded-full bg-sand p-1 text-sm">
+          <h2 className="text-center text-2xl font-semibold">ورود به سامانه</h2>
+          <div className="mt-6 flex rounded-full bg-sand p-1 text-sm">
             <button
               type="button"
-              className={`rounded-full px-3 py-2 ${mode === "agent" ? "bg-pine text-white" : "text-ink/70"}`}
-              onClick={() => setMode("agent")}
-            >
-              مشاور
-            </button>
-            <button
-              type="button"
-              className={`rounded-full px-3 py-2 ${mode === "admin" ? "bg-pine text-white" : "text-ink/70"}`}
+              className={`flex-1 rounded-full px-3 py-2 ${mode === "admin" ? "bg-pine text-white" : "text-ink/70"}`}
               onClick={() => setMode("admin")}
             >
               ادمین
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded-full px-2 py-2 leading-5 ${mode === "agent" ? "bg-pine text-white" : "text-ink/70"}`}
+              onClick={() => setMode("agent")}
+            >
+              مشاور خارج از پنل دیوار
             </button>
           </div>
 

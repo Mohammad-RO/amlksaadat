@@ -378,6 +378,6 @@ class SyncResultNoteTest(unittest.TestCase):
         self.assertEqual(sync_result_note(True, 190, 190, True), "کامل")
         self.assertEqual(
             sync_result_note(False, 25, 190, True),
-            "ناقص: بررسی لیست املاک و 25 آگهی از 190",
+            "ناقص: بررسی لیست مشاوران و 25 آگهی از 190",
         )
         self.assertEqual(sync_result_note(False, 0, 0, False), "ناقص: بررسی لیست مشاوران")

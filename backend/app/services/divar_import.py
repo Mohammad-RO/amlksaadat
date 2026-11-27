@@ -120,7 +120,7 @@ def sync_result_note(complete: bool, done: int, total: int, listed: bool) -> str
     if complete:
         return "کامل"
     if listed:
-        return f"ناقص: بررسی لیست املاک و {done} آگهی از {total}"
+        return f"ناقص: بررسی لیست مشاوران و {done} آگهی از {total}"
     return "ناقص: بررسی لیست مشاوران"
 
 

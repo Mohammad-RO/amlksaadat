@@ -16,9 +16,26 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--color-sand);
+  background: #f4faf6;
   color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+.app-scene {
+  background:
+    radial-gradient(ellipse 460px 300px at 6% 16%, rgba(176, 214, 176, 0.55), transparent 70%),
+    radial-gradient(ellipse 560px 380px at 94% 6%, rgba(198, 226, 190, 0.85), transparent 68%),
+    radial-gradient(ellipse 520px 340px at 78% 96%, rgba(186, 216, 180, 0.45), transparent 72%),
+    linear-gradient(180deg, #f7fbf6 0%, #eef6ee 100%);
+}
+
+.scene-house {
+  color: rgba(120, 168, 126, 0.45);
+}
+
+.brand-word {
+  font-family: Outfit, sans-serif;
+  letter-spacing: 0.16em;
 }
 
 button,
